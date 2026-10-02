@@ -1,13 +1,14 @@
 /*
  * « Mon entreprise » : logo et coordonnées affichés dans l'en-tête, les PDF et les emails.
- * Stockés sur l'appareil uniquement. Logo : celui choisi dans l'application, sinon le fichier
- * logo.png déposé à la racine du site (s'il existe).
+ * Stockés sur l'appareil uniquement. Logo : celui choisi dans l'application, sinon le logo
+ * intégré au site (logo.png pour le PDF, logo-embleme.png pour l'en-tête).
  */
 (function (root) {
   'use strict';
 
   var CLE = 'dimclim.entreprise';
   var FICHIER_LOGO = 'logo.png';
+  var FICHIER_EMBLEME = 'logo-embleme.png';
   var LARGEUR_MAX_LOGO = 900; // px : suffisant pour l'impression, léger pour le stockage local
 
   var DEFAUT = {
@@ -48,9 +49,9 @@
     }
   }
 
-  // Charge une image (URL ou data URL) et la convertit en PNG redimensionné.
-  // Résout { dataUrl, w, h } ou null si l'image est absente ou illisible.
-  function versPng(src, largeurMax) {
+  // Charge une image (URL ou data URL), la pose sur fond blanc et la convertit en JPEG
+  // redimensionné (PDF léger). Résout { dataUrl, w, h } ou null si l'image est absente ou illisible.
+  function versImage(src, largeurMax) {
     return new Promise(function (resolve) {
       var img = new Image();
       img.onload = function () {
@@ -60,9 +61,12 @@
         var canvas = document.createElement('canvas');
         canvas.width = Math.max(1, Math.round(w * k));
         canvas.height = Math.max(1, Math.round(h * k));
-        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        var ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         try {
-          resolve({ dataUrl: canvas.toDataURL('image/png'), w: canvas.width, h: canvas.height });
+          resolve({ dataUrl: canvas.toDataURL('image/jpeg', 0.92), w: canvas.width, h: canvas.height });
         } catch (e) {
           resolve(null);
         }
@@ -75,7 +79,7 @@
   var cacheLogo = null;
 
   function logo() {
-    if (!cacheLogo) cacheLogo = versPng(donnees.logo || FICHIER_LOGO, LARGEUR_MAX_LOGO);
+    if (!cacheLogo) cacheLogo = versImage(donnees.logo || FICHIER_LOGO, LARGEUR_MAX_LOGO);
     return cacheLogo;
   }
 
@@ -86,7 +90,7 @@
     img.onload = function () { barre.classList.add('has-logo'); };
     img.onerror = function () { barre.classList.remove('has-logo'); };
     img.alt = donnees.nom;
-    img.src = donnees.logo || FICHIER_LOGO;
+    img.src = donnees.logo || FICHIER_EMBLEME;
   }
 
   function esc(s) { return root.Fmt.esc(s); }
@@ -102,7 +106,7 @@
       '</div></div>' +
       '<p class="hint">' + (donnees.logo
         ? 'Logo choisi sur cet appareil.'
-        : 'Par défaut : fichier « logo.png » du site, s\'il existe. Vous pouvez aussi choisir une image du téléphone.') + '</p>' +
+        : 'Logo intégré à l\'application. Vous pouvez le remplacer par une image du téléphone.') + '</p>' +
       '<div class="grid">' +
       CHAMPS.map(function (c) {
         return '<div class="field span-2"><label class="lbl" for="ent-' + c[0] + '">' + esc(c[1]) + '</label>' +
@@ -156,8 +160,8 @@
       if (e.target.id !== 'logo-fichier' || !e.target.files || !e.target.files[0]) return;
       var lecteur = new FileReader();
       lecteur.onload = function () {
-        versPng(lecteur.result, LARGEUR_MAX_LOGO).then(function (png) {
-          if (png) changerLogo(png.dataUrl);
+        versImage(lecteur.result, LARGEUR_MAX_LOGO).then(function (image) {
+          if (image) changerLogo(image.dataUrl);
           else alert('Image illisible. Utilisez un fichier PNG ou JPG.');
         });
       };

@@ -128,9 +128,6 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .topbar.has-logo .logo { display: none; }
 .topbar-text { min-width: 0; }
 .topbar-actions { display: flex; gap: 2px; flex: none; }
-@media (max-width: 480px) {
-  .topbar.has-logo h1 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-}
 
 /* ---------- Mise en page ---------- */
 

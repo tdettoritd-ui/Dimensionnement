@@ -112,10 +112,10 @@
     /* --- En-tête entreprise --- */
     var hauteurEntete = 0;
     if (logo) {
-      var lh = 22;
+      var lh = 28;
       var lw = lh * logo.w / logo.h;
-      if (lw > 100) { lw = 100; lh = lw * logo.h / logo.w; }
-      doc.addImage(logo.dataUrl, 'PNG', MARGE, y, lw, lh);
+      if (lw > 110) { lw = 110; lh = lw * logo.h / logo.w; }
+      doc.addImage(logo.dataUrl, /^data:image\/png/.test(logo.dataUrl) ? 'PNG' : 'JPEG', MARGE, y, lw, lh);
       hauteurEntete = lh;
     } else {
       police(doc, 16, true, BLEU);
