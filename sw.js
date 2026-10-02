@@ -1,0 +1,37 @@
+// Service worker : met l'application en cache pour un usage hors ligne sur le terrain.
+// Incrémenter VERSION à chaque modification des fichiers listés.
+var VERSION = 'releve-pac-v1';
+var FICHIERS = [
+  './',
+  './index.html',
+  './css/styles.css',
+  './js/data.js',
+  './js/calc.js',
+  './js/app.js',
+  './manifest.webmanifest',
+  './icon.svg'
+];
+
+self.addEventListener('install', function (e) {
+  e.waitUntil(caches.open(VERSION).then(function (c) { return c.addAll(FICHIERS); }).then(function () { return self.skipWaiting(); }));
+});
+
+self.addEventListener('activate', function (e) {
+  e.waitUntil(caches.keys().then(function (cles) {
+    return Promise.all(cles.filter(function (k) { return k !== VERSION; }).map(function (k) { return caches.delete(k); }));
+  }).then(function () { return self.clients.claim(); }));
+});
+
+// Réseau d'abord (pour récupérer les mises à jour), cache en secours hors ligne.
+self.addEventListener('fetch', function (e) {
+  if (e.request.method !== 'GET' || new URL(e.request.url).origin !== location.origin) return;
+  e.respondWith(
+    fetch(e.request).then(function (r) {
+      var copie = r.clone();
+      caches.open(VERSION).then(function (c) { c.put(e.request, copie); });
+      return r;
+    }).catch(function () {
+      return caches.match(e.request, { ignoreSearch: true }).then(function (r) { return r || caches.match('./index.html'); });
+    })
+  );
+});

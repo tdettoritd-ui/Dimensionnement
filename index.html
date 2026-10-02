@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="Relevé chantier et dimensionnement climatisation / pompe à chaleur, calcul local et hors ligne.">
+  <meta name="theme-color" content="#0f5f8c">
+  <title>Relevé PAC Clim</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="css/styles.css">
+  <script>
+    // Thème appliqué avant le premier rendu pour éviter un flash.
+    try {
+      var t = localStorage.getItem('dimclim.theme');
+      if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+    } catch (e) {}
+  </script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-title">
+      <svg class="logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M4.9 4.9l14.2 14.2M2 12h20M4.9 19.1L19.1 4.9" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
+      <div>
+        <h1>Relevé PAC / Clim</h1>
+        <p id="chantier-courant" class="muted small"></p>
+      </div>
+    </div>
+    <button type="button" class="btn ghost icon-btn" id="btn-theme" aria-label="Changer de thème"></button>
+  </header>
+
+  <main id="app" class="app" aria-live="off"></main>
+
+  <footer class="totals" id="totals" aria-label="Totaux et actions">
+    <div class="totals-figures" id="totals-figures"></div>
+    <nav class="totals-actions">
+      <button type="button" class="btn" data-global="nouveau">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Nouveau</span>
+      </button>
+      <button type="button" class="btn" data-global="chantiers">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg><span>Chantiers</span>
+      </button>
+      <button type="button" class="btn" data-global="pdf">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4v-7h16v7h-2M8 14h8v7H8z"/></svg><span>PDF</span>
+      </button>
+      <button type="button" class="btn primary" data-global="sauver">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h11l3 3v15H5zM8 3v5h7V3M8 21v-7h8v7"/></svg><span>Sauver</span>
+      </button>
+    </nav>
+  </footer>
+
+  <dialog id="dlg-chantiers" class="dialog">
+    <div class="dialog-head">
+      <h2>Mes chantiers</h2>
+      <button type="button" class="btn ghost icon-btn" data-close aria-label="Fermer">✕</button>
+    </div>
+    <div id="liste-chantiers" class="dialog-body"></div>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <div id="print-report" class="print-report"></div>
+
+  <script src="js/data.js"></script>
+  <script src="js/calc.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

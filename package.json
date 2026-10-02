@@ -1,0 +1,10 @@
+{
+  "name": "releve-pac-clim",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Relevé chantier et dimensionnement climatisation / pompe à chaleur (application web hors ligne).",
+  "scripts": {
+    "test": "node --test",
+    "start": "python3 -m http.server 8080"
+  }
+}
