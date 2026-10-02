@@ -6,7 +6,10 @@ Application web (PWA) pour réaliser un relevé technique chez un client et obte
 - Fonctionne **hors ligne** une fois chargée (service worker) et s'installe sur l'écran d'accueil (« Ajouter à l'écran d'accueil »).
 - **Aucune donnée envoyée à un serveur** : calcul et stockage (localStorage) restent sur l'appareil.
 - Mobile-first, thèmes clair / sombre / automatique.
-- Export PDF via l'impression du navigateur (« Enregistrer au format PDF ») avec une mise en page dédiée.
+- **PDF** généré directement sur l'appareil (logo et coordonnées de l'entreprise, synthèse, détail par pièce).
+- **Envoi par email** : partage du PDF via le menu du téléphone (Mail, Gmail, Outlook…), ou email pré-rempli dans la messagerie (destinataire, objet, synthèse).
+- **Mon entreprise** (icône immeuble en haut) : logo, coordonnées, technicien — repris dans le PDF et l'email.
+- **Vitrages** : saisie détaillée fenêtre par fenêtre, ou rapide (peu / moyennement / très vitré).
 
 ## Utilisation
 
@@ -26,8 +29,14 @@ Pour un usage terrain, héberger le dossier sur n'importe quel hébergement stat
 | `index.html` | Coquille de l'application, barre de totaux et d'actions |
 | `js/data.js` | Tables de référence (parois, isolants, vitrages, paliers, radiateurs, plafonds Anah…) |
 | `js/calc.js` | Moteur de calcul (fonctions pures, testées) |
-| `js/app.js` | Rendu, saisie, chantiers sauvegardés, export PDF, thème |
-| `css/styles.css` | Styles écran (clair/sombre) et impression |
+| `js/format.js` | Mise en forme partagée (nombres, libellés, descriptions) |
+| `js/entreprise.js` | « Mon entreprise » : logo, coordonnées |
+| `js/rapport.js` | Génération du PDF |
+| `js/envoi.js` | Envoi par email (partage / messagerie) |
+| `js/app.js` | Rendu, saisie, chantiers sauvegardés, barre d'actions, thème |
+| `css/styles.css` | Styles (clair/sombre) |
+| `vendor/` | jsPDF 4.2.1 et jspdf-autotable 5.0.8 (licence MIT, voir `vendor/LICENSES.txt`) |
+| `logo.png`, `logo-embleme.png`, `icon-*.png` | Logo C&H Énergie (PDF, en-tête, icône) — source : `assets/logo-source.png` |
 | `sw.js` | Cache hors ligne — **incrémenter `VERSION` à chaque mise à jour des fichiers** |
 | `tests/calc.test.js` | Tests du moteur de calcul |
 
@@ -44,6 +53,8 @@ Par pièce :
 
 Totaux : somme des pièces ; palier PAC/clim = plus petit palier ≥ total (au-delà de 28 kW : étude multi-splits). Radiateur neuf : plus petit palier ≥ besoin de la pièce (au-delà de 3 000 W : plusieurs émetteurs). Radiateur existant « Suffisant » si sa puissance ≥ 95 % du besoin.
 
+**Saisie rapide des vitrages** : surface vitrée = pourcentage de la surface au sol de la pièce selon le niveau (table `NIVEAUX_VITRAGE` de `js/data.js`), avec une orientation principale, un type de vitrage et la présence de volets. L'orientation « Plusieurs orientations » utilise la moyenne des rayonnements de la table.
+
 **Débit de ventilation** : le bouton « Estimer » remplit `volume × taux` du type de ventilation. Si le champ est laissé vide, cette estimation est utilisée automatiquement (affichée en grisé) pour ne pas oublier le poste renouvellement d'air.
 
 ## Points d'attention
@@ -51,4 +62,6 @@ Totaux : somme des pièces ; palier PAC/clim = plus petit palier ≥ total (au-d
 - Les puissances de radiateurs existants (acier, fonte, aluminium) sont des **ordres de grandeur ΔT50**, pas des données constructeur certifiées.
 - Les plafonds Anah sont ceux de **2026** (`js/data.js`, objet `ANAH`) : à recontrôler et mettre à jour en début d'année civile.
 - « Nouveau relevé » réinitialise client, installation, prime et pièces, mais conserve les réglages climat / enveloppe.
+- **Email** : sans serveur, l'application ne peut pas expédier le message elle-même. « Partager le PDF » (téléphones) joint le PDF dans la messagerie choisie ; l'adresse du client est copiée pour être collée dans « À ». « Ouvrir ma messagerie » prépare l'email ; sur ordinateur, le PDF est téléchargé pour être joint.
+- **Changer le logo** : remplacer `logo.png` / `logo-embleme.png` (ou choisir une image dans « Mon entreprise », stockée sur l'appareil).
 - Le relevé en cours est conservé automatiquement (brouillon) même sans sauvegarde explicite ; « Sauver » l'ajoute à « Mes chantiers ».
