@@ -21,13 +21,19 @@
 <body>
   <header class="topbar">
     <div class="topbar-title">
+      <img id="logo-entete" class="logo-img" alt="">
       <svg class="logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M4.9 4.9l14.2 14.2M2 12h20M4.9 19.1L19.1 4.9" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
-      <div>
+      <div class="topbar-text">
         <h1>Relevé PAC / Clim</h1>
         <p id="chantier-courant" class="muted small"></p>
       </div>
     </div>
-    <button type="button" class="btn ghost icon-btn" id="btn-theme" aria-label="Changer de thème"></button>
+    <div class="topbar-actions">
+      <button type="button" class="btn ghost icon-btn" id="btn-entreprise" aria-label="Mon entreprise (logo, coordonnées)" title="Mon entreprise">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V5l8-3v19M12 9h8v12M7 8h2M7 12h2M7 16h2M15 13h2M15 17h2M2 21h20"/></svg>
+      </button>
+      <button type="button" class="btn ghost icon-btn" id="btn-theme" aria-label="Changer de thème"></button>
+    </div>
   </header>
 
   <main id="app" class="app" aria-live="off"></main>
@@ -42,7 +48,10 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg><span>Chantiers</span>
       </button>
       <button type="button" class="btn" data-global="pdf">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4v-7h16v7h-2M8 14h8v7H8z"/></svg><span>PDF</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6v18h12V7zM14 3v4h4M9 13h6M9 17h6"/></svg><span>PDF</span>
+      </button>
+      <button type="button" class="btn" data-global="email">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18v14H3zM3 6l9 7 9-7"/></svg><span>Email</span>
       </button>
       <button type="button" class="btn primary" data-global="sauver">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h11l3 3v15H5zM8 3v5h7V3M8 21v-7h8v7"/></svg><span>Sauver</span>
@@ -58,11 +67,32 @@
     <div id="liste-chantiers" class="dialog-body"></div>
   </dialog>
 
-  <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <div id="print-report" class="print-report"></div>
+  <dialog id="dlg-entreprise" class="dialog">
+    <div class="dialog-head">
+      <h2>Mon entreprise</h2>
+      <button type="button" class="btn ghost icon-btn" data-close aria-label="Fermer">✕</button>
+    </div>
+    <div id="form-entreprise" class="dialog-body"></div>
+  </dialog>
 
+  <dialog id="dlg-envoi" class="dialog">
+    <div class="dialog-head">
+      <h2>Envoyer par email</h2>
+      <button type="button" class="btn ghost icon-btn" data-close aria-label="Fermer">✕</button>
+    </div>
+    <div id="form-envoi" class="dialog-body"></div>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="vendor/jspdf.umd.min.js"></script>
+  <script src="vendor/jspdf.plugin.autotable.min.js"></script>
   <script src="js/data.js"></script>
   <script src="js/calc.js"></script>
+  <script src="js/format.js"></script>
+  <script src="js/entreprise.js"></script>
+  <script src="js/rapport.js"></script>
+  <script src="js/envoi.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

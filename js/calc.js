@@ -56,6 +56,32 @@
     return Math.max(t.u - (vitrage.volet === 'oui' ? REDUCTION_VOLET : 0), U_VITRAGE_MIN);
   }
 
+  // Rayonnement d'été (W/m²) d'une orientation ; « mixte » = moyenne des orientations.
+  function rayonnement(orientationId) {
+    if (orientationId === D.ORIENTATION_MIXTE.id) {
+      var somme = 0;
+      D.ORIENTATIONS.forEach(function (o) { somme += o.w; });
+      return somme / D.ORIENTATIONS.length;
+    }
+    var o = D.find(D.ORIENTATIONS, orientationId);
+    return o ? o.w : 0;
+  }
+
+  // Vitrages pris en compte : la liste détaillée, ou en saisie rapide un vitrage
+  // équivalent dont la surface vaut ratio du niveau × surface au sol.
+  function vitragesPiece(piece) {
+    if (piece.vitrageMode !== 'rapide') return piece.vitrages || [];
+    var g = piece.vitrageRapide || {};
+    var niveau = D.find(D.NIVEAUX_VITRAGE, g.niveau);
+    var surfaceSol = num(piece.longueur) * num(piece.largeur);
+    return [{
+      orientation: g.orientation,
+      type: g.type,
+      volet: g.volet,
+      surface: niveau ? surfaceSol * niveau.ratio : 0
+    }];
+  }
+
   function debitEstime(piece, climat) {
     var v = D.find(D.VENTILATIONS, climat.ventilation);
     var volume = num(piece.longueur) * num(piece.largeur) * num(piece.hauteur);
@@ -100,13 +126,12 @@
     var surfaceVitree = 0;
     var deperditionsVitrages = 0;
     var apportsSolaires = 0;
-    (piece.vitrages || []).forEach(function (v) {
+    vitragesPiece(piece).forEach(function (v) {
       var surface = Math.max(num(v.surface), 0);
       var type = D.find(D.VITRAGES, v.type);
-      var orientation = D.find(D.ORIENTATIONS, v.orientation);
       surfaceVitree += surface;
       deperditionsVitrages += uVitrage(v) * surface;
-      if (type && orientation) apportsSolaires += surface * type.g * orientation.w;
+      if (type) apportsSolaires += surface * type.g * rayonnement(v.orientation);
     });
 
     var smur = Math.max(num(piece.lineaire) * num(piece.hauteur) - surfaceVitree, 0);
@@ -210,6 +235,8 @@
     debitEstime: debitEstime,
     palier: palier,
     radiateurExistant: radiateurExistant,
+    rayonnement: rayonnement,
+    vitragesPiece: vitragesPiece,
     calculPiece: calculPiece,
     calculChantier: calculChantier,
     seuilsAnah: seuilsAnah,

@@ -77,6 +77,16 @@
     { id: 'N', label: 'Nord', w: 60 }
   ];
 
+  // Orientation « moyenne » proposée en saisie rapide : rayonnement = moyenne des 8 orientations.
+  var ORIENTATION_MIXTE = { id: 'mixte', label: 'Plusieurs orientations (moyenne)' };
+
+  // Saisie rapide des vitrages : surface vitrée = ratio × surface au sol de la pièce.
+  var NIVEAUX_VITRAGE = [
+    { id: 'peu', label: 'Peu vitré', ratio: 0.10 },
+    { id: 'moyen', label: 'Moyennement vitré', ratio: 0.17 },
+    { id: 'tres', label: 'Très vitré', ratio: 0.25 }
+  ];
+
   // Apports internes par occupant (W)
   var ACTIVITES = [
     { id: 'sedentaire', label: 'Sédentaire', w: 70 },
@@ -167,6 +177,8 @@
     ISOLANTS: ISOLANTS,
     VITRAGES: VITRAGES,
     ORIENTATIONS: ORIENTATIONS,
+    ORIENTATION_MIXTE: ORIENTATION_MIXTE,
+    NIVEAUX_VITRAGE: NIVEAUX_VITRAGE,
     ACTIVITES: ACTIVITES,
     VENTILATIONS: VENTILATIONS,
     PALIERS_PAC: PALIERS_PAC,

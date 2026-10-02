@@ -115,3 +115,21 @@ test('totaux chantier et préconisation PAC', () => {
   assert.equal(r.palierChauffage.valeur, 2.5);
   assert.equal(r.anah, null);
 });
+
+test('saisie rapide des vitrages : surface = ratio × surface au sol', () => {
+  const base = { longueur: '5', largeur: '4', hauteur: '2.5', lineaire: '18', sousToiture: 'non', debit: '0',
+    vitrages: [{ orientation: 'N', type: 'simple', surface: '9', volet: 'non' }] };
+  const rapide = { ...base, vitrageMode: 'rapide', vitrageRapide: { niveau: 'moyen', orientation: 'S', type: 'double', volet: 'oui' } };
+  const r = C.calculPiece(rapide, climat);
+  proche(r.surfaceVitree, 20 * 0.17);
+  proche(r.deperditions.vitrages, 20 * 0.17 * 2.6);
+  proche(r.apports.solaires, 20 * 0.17 * 0.6 * 150);
+  proche(r.smur, 18 * 2.5 - 20 * 0.17);
+  // la liste détaillée est ignorée en mode rapide, et réutilisée en mode détaillé
+  proche(C.calculPiece(base, climat).surfaceVitree, 9);
+});
+
+test('orientation mixte = moyenne des orientations', () => {
+  proche(C.rayonnement('mixte'), (150 + 180 + 180 + 130 + 130 + 70 + 70 + 60) / 8);
+  assert.equal(C.rayonnement('inconnue'), 0);
+});

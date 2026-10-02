@@ -7,6 +7,7 @@
 
   var D = window.Data;
   var C = window.Calc;
+  var F = window.Fmt;
 
   var CLE_CHANTIERS = 'dimclim.chantiers';
   var CLE_BROUILLON = 'dimclim.brouillon';
@@ -72,7 +73,9 @@
       hauteur: '2,5',
       lineaire: '',
       sousToiture: 'oui',
+      vitrageMode: 'detail',
       vitrages: [],
+      vitrageRapide: { niveau: 'moyen', orientation: 'mixte', type: 'double', volet: 'non' },
       occupants: '',
       activite: 'sedentaire',
       equipements: '',
@@ -113,6 +116,7 @@
       var np = Object.assign(nouvellePiece(i + 1), p);
       np.radiateur = Object.assign(nouvellePiece(1).radiateur, p.radiateur);
       np.vitrages = (p.vitrages || []).map(function (v) { return Object.assign(nouveauVitrage(), v); });
+      np.vitrageRapide = Object.assign(nouvellePiece(1).vitrageRapide, p.vitrageRapide);
       if (!np.uid) np.uid = uid();
       return np;
     });
@@ -140,44 +144,16 @@
     target[last] = value;
   }
 
-  /* ---------- Formatage ---------- */
+  /* ---------- Formatage (js/format.js) ---------- */
 
-  function esc(s) {
-    return String(s == null ? '' : s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-  }
-
-  function nf(v, dec) {
-    return v.toLocaleString('fr-FR', { minimumFractionDigits: dec || 0, maximumFractionDigits: dec || 0 });
-  }
-
-  function kW(w) { return nf(w / 1000, 2) + ' kW'; }
-  function W(w) { return nf(Math.round(w)) + ' W'; }
-  function euros(v) { return nf(Math.round(v)) + ' €'; }
-
-  function libelle(table, id) {
-    var e = D.find(table, id);
-    return e ? e.label : '—';
-  }
-
-  function texteOuiNon(v) {
-    return v === 'oui' ? 'Oui' : v === 'non' ? 'Non' : '—';
-  }
-
-  function textePalierPac(p) {
-    if (p.depasse) return 'Étude multi-splits';
-    return p.valeur === null ? '—' : nf(p.valeur, p.valeur % 1 ? 1 : 0) + ' kW';
-  }
-
-  function palierBarre(p) {
-    return p.depasse ? textePalierPac(p) : 'Palier ' + textePalierPac(p);
-  }
-
-  function textePalierRadiateur(p) {
-    if (p.depasse) return 'Plusieurs émetteurs';
-    return p.valeur === null ? '—' : W(p.valeur);
-  }
+  var esc = F.esc;
+  var nf = F.nf;
+  var kW = F.kW;
+  var W = F.W;
+  var euros = F.euros;
+  var palierBarre = F.palierBarre;
+  var textePalierRadiateur = F.textePalierRadiateur;
+  var dateFr = F.dateFr;
 
   /* ---------- Composants de formulaire ---------- */
 
@@ -350,6 +326,33 @@
       '</div></div>';
   }
 
+  // Saisie rapide : un niveau de vitrage global au lieu de chaque fenêtre.
+  function renderVitrageRapide(p, i) {
+    var base = 'pieces.' + i + '.vitrageRapide';
+    var orientations = [{ value: D.ORIENTATION_MIXTE.id, label: D.ORIENTATION_MIXTE.label }]
+      .concat(D.ORIENTATIONS.map(function (o) { return { value: o.id, label: o.label }; }));
+    return '<div class="grid">' +
+      bascule('Niveau de vitrage', base + '.niveau', D.NIVEAUX_VITRAGE.map(function (n) { return [n.id, n.label.replace(' vitré', '')]; }), { obligatoire: true, cls: 'span-2' }) +
+      '</div>' +
+      '<p class="hint" id="vitrage-rapide-' + p.uid + '"></p>' +
+      '<div class="grid">' +
+      liste('Orientation principale', base + '.orientation', orientations, { cls: 'span-2' }) +
+      liste('Type de vitrage', base + '.type', table2options(D.VITRAGES), { cls: 'span-2' }) +
+      bascule('Volets roulants', base + '.volet', OUI_NON, { obligatoire: true, cls: 'span-2' }) +
+      '</div>';
+  }
+
+  function renderVitrages(p, i) {
+    var rapide = p.vitrageMode === 'rapide';
+    return '<div class="grid">' +
+      bascule('Saisie des vitrages', 'pieces.' + i + '.vitrageMode', [['detail', 'Détaillée'], ['rapide', 'Rapide (estimation)']], { obligatoire: true, cls: 'span-2' }) +
+      '</div>' +
+      (rapide
+        ? renderVitrageRapide(p, i)
+        : p.vitrages.map(function (v, j) { return renderVitrage(i, j); }).join('') +
+          '<button type="button" class="btn small" data-action="ajouter-vitrage" data-i="' + i + '">+ Ajouter un vitrage</button>');
+  }
+
   function renderRadiateur(p, i) {
     var base = 'pieces.' + i + '.radiateur';
     var r = p.radiateur;
@@ -387,8 +390,7 @@
         bascule('Pièce sous toiture ?', 'pieces.' + i + '.sousToiture', [['oui', 'Oui'], ['non', 'Non (étage interm.)']], { obligatoire: true, cls: 'span-2' }) +
         '</div>' +
         '<h4 class="sub-title">Vitrages</h4>' +
-        p.vitrages.map(function (v, j) { return renderVitrage(i, j); }).join('') +
-        '<button type="button" class="btn small" data-action="ajouter-vitrage" data-i="' + i + '">+ Ajouter un vitrage</button>' +
+        renderVitrages(p, i) +
         '<h4 class="sub-title">Apports internes et ventilation</h4>' +
         '<div class="grid">' +
         champ('Occupants', 'pieces.' + i + '.occupants', { kind: 'int' }) +
@@ -517,6 +519,11 @@
         if (det) { det.open = ouvert; det.dataset.uid = p.uid; }
       }
       setHTML('radex-' + p.uid, blocRadiateurExistant(r));
+      var niveau = D.find(D.NIVEAUX_VITRAGE, p.vitrageRapide.niveau);
+      setHTML('vitrage-rapide-' + p.uid, niveau
+        ? 'Surface vitrée estimée : ' + nf(r.surfaceVitree, 1) + ' m² (' + nf(niveau.ratio * 100) + ' % de la surface au sol' +
+          (r.surface > 0 ? '' : ', à calculer après saisie des dimensions') + ').'
+        : '');
       var input = document.querySelector('[data-bind="pieces.' + i + '.debit"]');
       if (input) input.placeholder = 'auto : ' + nf(r.debitEstime, 1);
       setHTML('debit-aide-' + p.uid, r.debitAuto ? 'Vide : estimation volume × taux utilisée (' + nf(r.debitEstime, 1) + ' m³/h).' : '');
@@ -673,11 +680,6 @@
     rafraichir();
   }
 
-  function dateFr(iso) {
-    if (!iso) return '';
-    var d = new Date(iso.length === 10 ? iso + 'T00:00:00' : iso);
-    return isNaN(d) ? iso : d.toLocaleDateString('fr-FR');
-  }
 
   function afficherChantiers() {
     var l = chantiers();
@@ -744,110 +746,17 @@
     window.scrollTo(0, 0);
   }
 
-  /* ---------- Export PDF (impression navigateur) ---------- */
+  /* ---------- Export PDF ---------- */
 
-  function ligne(label, valeur) {
-    return '<tr><th>' + esc(label) + '</th><td>' + (valeur === '' || valeur == null ? '—' : esc(valeur)) + '</td></tr>';
+  function exporterPdf() {
+    toast('Création du PDF…');
+    window.Rapport.generer(state).then(function (f) {
+      window.Rapport.telecharger(f);
+      toast('PDF enregistré : ' + f.nom);
+    }).catch(function (err) {
+      toast('PDF impossible : ' + err.message);
+    });
   }
-
-  function avecUnite(v, u) {
-    return C.estVide(v) ? '' : v + ' ' + u;
-  }
-
-  function isolantTexte(iso) {
-    var m = D.find(D.ISOLANTS, iso.materiau);
-    if (!m || !m.lambda) return 'Aucun isolant';
-    return m.label + ' ' + (C.estVide(iso.epaisseur) ? '(épaisseur non saisie)' : iso.epaisseur + ' cm');
-  }
-
-  function construireRapport() {
-    var s = state;
-    var res = C.calculChantier(s);
-    var c = s.client;
-    var k = s.climat;
-    var ins = s.installation;
-    var ecs = ins.ecsPac === 'oui' ? 'Par la PAC' : ins.ecsPac === 'non' ? (ins.ballonThermo === 'oui' ? 'Ballon thermodynamique' : ins.ballonThermo === 'non' ? 'Autre (hors PAC / thermo.)' : 'Hors PAC') : '';
-    if (ecs && ins.ecsEmplacement && (ins.ecsPac === 'oui' || ins.ballonThermo === 'oui')) ecs += ' – ' + (ins.ecsEmplacement === 'integre' ? 'intégré' : 'déporté');
-
-    var pieces = s.pieces.map(function (p, i) {
-      var r = res.pieces[i];
-      var vit = p.vitrages.length
-        ? p.vitrages.map(function (v) {
-          return libelle(D.ORIENTATIONS, v.orientation) + ' · ' + libelle(D.VITRAGES, v.type) + ' · ' + (v.surface || '0') + ' m²' + (v.volet === 'oui' ? ' · volet' : '');
-        }).join('<br>')
-        : '—';
-      var rad = '—';
-      if (r.radiateurExistant) {
-        var pr = p.radiateur;
-        var desc = pr.materiau === 'acier'
-          ? 'Acier ' + libelle(D.RADIATEURS_ACIER, pr.typeAcier) + ' ' + (pr.hauteur || '?') + '×' + (pr.longueur || '?') + ' cm'
-          : libelle(D.MATERIAUX_RADIATEUR, pr.materiau) + ' ' + (pr.elements || '0') + ' élts de ' + pr.hauteurElement + ' mm';
-        rad = esc(desc) + ' → ' + W(r.radiateurExistant.puissance) + ' · ' +
-          (r.radiateurExistant.suffisant ? 'Suffisant' : 'Insuffisant (manque ' + W(r.radiateurExistant.manque) + ')');
-      }
-      return '<div class="rp-piece">' +
-        '<h3>' + esc(p.nom) + ' <span>' + kW(r.chauffage) + ' chauffage · ' + kW(r.climatisation) + ' clim</span></h3>' +
-        '<table><tbody>' +
-        '<tr><th>Dimensions</th><td>' + esc((p.longueur || '?') + ' × ' + (p.largeur || '?') + ' × ' + (p.hauteur || '?') + ' m') + ' · ' + nf(r.surface, 1) + ' m² · ' + nf(r.volume, 1) + ' m³</td></tr>' +
-        '<tr><th>Murs ext. exposés</th><td>' + esc(avecUnite(p.lineaire, 'ml') || '—') + ' · sous toiture : ' + texteOuiNon(p.sousToiture) + '</td></tr>' +
-        '<tr><th>Vitrages</th><td>' + vit + '</td></tr>' +
-        '<tr><th>Occupants / équipements</th><td>' + esc((p.occupants || '0') + ' (' + libelle(D.ACTIVITES, p.activite) + ') · ' + (p.equipements || '0') + ' W') + '</td></tr>' +
-        '<tr><th>Ventilation</th><td>' + nf(r.debit, 1) + ' m³/h' + (r.debitAuto ? ' (estimé)' : '') + '</td></tr>' +
-        '<tr><th>Déperditions G</th><td>' + nf(r.G, 2) + ' W/K</td></tr>' +
-        '<tr><th>Radiateur neuf préconisé</th><td>' + textePalierRadiateur(r.radiateurNeuf) + '</td></tr>' +
-        '<tr><th>Radiateur existant</th><td>' + rad + '</td></tr>' +
-        '</tbody></table></div>';
-    }).join('');
-
-    var anah = res.anah;
-    var u = C.uEnveloppe(k);
-
-    document.getElementById('print-report').innerHTML =
-      '<header class="rp-head"><div><h1>Relevé technique PAC / climatisation</h1>' +
-      '<p>' + esc(c.nom || 'Client non renseigné') + ' · relevé du ' + esc(dateFr(c.date) || '—') + '</p></div></header>' +
-      '<section class="rp-totaux">' +
-      '<div><span>Besoin de chauffage</span><strong>' + kW(res.chauffage) + '</strong><small>Palier PAC : ' + textePalierPac(res.palierChauffage) + '</small></div>' +
-      '<div><span>Besoin de climatisation</span><strong>' + kW(res.climatisation) + '</strong><small>Palier clim : ' + textePalierPac(res.palierClimatisation) + '</small></div>' +
-      (anah ? '<div><span>Catégorie Anah</span><strong>' + anah.categorie.label + '</strong><small>' + anah.categorie.detail + '</small></div>' : '') +
-      '</section>' +
-      '<div class="rp-cols">' +
-      '<section><h2>Client</h2><table><tbody>' +
-      ligne('Nom', c.nom) + ligne('Adresse', c.adresse) + ligne('Téléphone', c.telephone) + ligne('Email', c.email) +
-      ligne('Année de construction', c.annee) + ligne('Chauffage actuel', c.generation ? libelle(D.GENERATIONS, c.generation) : '') +
-      '</tbody></table></section>' +
-      '<section><h2>Climat / enveloppe</h2><table><tbody>' +
-      ligne('Zone', libelle(D.ZONES, k.zone)) +
-      ligne('Base hiver / été', k.tBaseHiver + ' °C / ' + k.tBaseEte + ' °C') +
-      ligne('Confort hiver / été', k.tConfortHiver + ' °C / ' + k.tConfortEte + ' °C') +
-      ligne('Murs', libelle(D.MURS, k.murType) + ' + ' + isolantTexte(k.isolantMur) + ' (U ' + nf(u.mur, 2) + ')') +
-      ligne('Plancher bas', libelle(D.PLANCHERS, k.plancherType) + (k.plancherType !== 'aucun' ? ' + ' + isolantTexte(k.isolantPlancher) : '') + ' (U ' + nf(u.plancher, 2) + ')') +
-      ligne('Toiture', libelle(D.TOITURES, k.toitureType) + (k.toitureType !== 'aucune' ? ' + ' + isolantTexte(k.isolantToiture) : '') + ' (U ' + nf(u.toiture, 2) + ')') +
-      ligne('Ventilation', libelle(D.VENTILATIONS, k.ventilation)) +
-      '</tbody></table></section>' +
-      '<section><h2>Installation</h2><table><tbody>' +
-      ligne('Ballon tampon', texteOuiNon(ins.ballonTampon) + (ins.ballonTampon === 'oui' && ins.volumeTampon ? ' – ' + ins.volumeTampon + ' L' : '')) +
-      ligne('ECS', ecs) +
-      ligne('Électricité', ins.electrique === 'mono' ? 'Monophasé' : ins.electrique === 'tri' ? 'Triphasé' : '') +
-      ligne('Régulation connectée', texteOuiNon(ins.regulation)) +
-      ligne('Mini tableau dédié', texteOuiNon(ins.miniTableau)) +
-      ligne('Distance UI ↔ UE', avecUnite(ins.distUiUe, 'm')) +
-      ligne('Distance UE ↔ tableau', avecUnite(ins.distUeTableau, 'm')) +
-      ligne('Distance UI ↔ tableau', avecUnite(ins.distUiTableau, 'm')) +
-      ligne('Condensats à proximité', texteOuiNon(ins.condensats)) +
-      '</tbody></table></section>' +
-      '<section><h2>Prime Anah / MaPrimeRénov\'</h2><table><tbody>' +
-      ligne('Personnes au foyer', s.prime.personnes) +
-      ligne('RFR', C.estVide(s.prime.rfr) ? '' : euros(C.num(s.prime.rfr))) +
-      ligne('Zone', s.prime.zone === 'idf' ? 'Île-de-France' : 'Hors Île-de-France') +
-      ligne('Catégorie', anah ? anah.categorie.label + ' – ' + anah.categorie.detail : '') +
-      '</tbody></table></section>' +
-      '</div>' +
-      '<h2>Pièces</h2>' + pieces +
-      '<footer class="rp-foot">Puissances radiateurs existants : valeurs indicatives ΔT50, à recouper avec la documentation constructeur. ' +
-      'Plafonds Anah ' + D.ANAH.annee + ' à recontrôler chaque année. Document généré le ' + new Date().toLocaleDateString('fr-FR') + '.</footer>';
-  }
-
-  window.addEventListener('beforeprint', construireRapport);
 
   /* ---------- Barre d'actions et thème ---------- */
 
@@ -857,7 +766,8 @@
     switch (bt.dataset.global) {
       case 'nouveau': nouveauReleve(); break;
       case 'chantiers': afficherChantiers(); dlg.showModal(); break;
-      case 'pdf': construireRapport(); window.print(); break;
+      case 'pdf': exporterPdf(); break;
+      case 'email': window.Envoi.ouvrir(state); break;
       case 'sauver': sauvegarder(); break;
     }
   });
@@ -891,6 +801,9 @@
 
   // Rappel avant de quitter avec des modifications non sauvegardées (le brouillon reste conservé).
   window.addEventListener('beforeunload', function () { ecrire(CLE_BROUILLON, state); });
+
+  window.Entreprise.initialiser();
+  window.Envoi.initialiser();
 
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
     navigator.serviceWorker.register('sw.js').catch(function () { /* hors ligne non disponible */ });

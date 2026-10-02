@@ -1,19 +1,28 @@
 // Service worker : met l'application en cache pour un usage hors ligne sur le terrain.
 // Incrémenter VERSION à chaque modification des fichiers listés.
-var VERSION = 'releve-pac-v1';
+var VERSION = 'releve-pac-v2';
 var FICHIERS = [
   './',
   './index.html',
   './css/styles.css',
   './js/data.js',
   './js/calc.js',
+  './js/format.js',
+  './js/entreprise.js',
+  './js/rapport.js',
+  './js/envoi.js',
   './js/app.js',
+  './vendor/jspdf.umd.min.js',
+  './vendor/jspdf.plugin.autotable.min.js',
   './manifest.webmanifest',
   './icon.svg'
 ];
 
 self.addEventListener('install', function (e) {
-  e.waitUntil(caches.open(VERSION).then(function (c) { return c.addAll(FICHIERS); }).then(function () { return self.skipWaiting(); }));
+  e.waitUntil(caches.open(VERSION).then(function (c) {
+    // Le logo est facultatif : son absence ne doit pas empêcher l'installation.
+    return c.addAll(FICHIERS).then(function () { return c.add('./logo.png').catch(function () {}); });
+  }).then(function () { return self.skipWaiting(); }));
 });
 
 self.addEventListener('activate', function (e) {
