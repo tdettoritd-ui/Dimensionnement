@@ -320,7 +320,7 @@
       '<button type="button" class="btn ghost small danger" data-action="supprimer-vitrage" data-i="' + i + '" data-j="' + j + '" aria-label="Supprimer le vitrage ' + (j + 1) + '">Supprimer</button></div>' +
       '<div class="grid">' +
       liste('Orientation', base + '.orientation', D.ORIENTATIONS.map(function (o) { return { value: o.id, label: o.label }; })) +
-      champ('Surface', base + '.surface', { kind: 'num', unite: 'm²' }) +
+      champ('Surface de la baie', base + '.surface', { kind: 'num', unite: 'm²' }) +
       liste('Type de vitrage', base + '.type', table2options(D.VITRAGES), { cls: 'span-2' }) +
       bascule('Volet roulant', base + '.volet', OUI_NON, { obligatoire: true, cls: 'span-2' }) +
       '</div></div>';

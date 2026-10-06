@@ -57,6 +57,34 @@ Totaux : somme des pièces ; palier PAC/clim = plus petit palier ≥ total (au-d
 
 **Débit de ventilation** : le bouton « Estimer » remplit `volume × taux` du type de ventilation. Si le champ est laissé vide, cette estimation est utilisée automatiquement (affichée en grisé) pour ne pas oublier le poste renouvellement d'air.
 
+## Révision des tables (octobre 2026)
+
+Les tables de `js/data.js` ont été contrôlées et corrigées à partir des tables réglementaires 3CL-DPE 2021 (arrêté du 31/03/2021, transcription Open3CL), de la NF EN 12831 (températures de base, coefficients de réduction), de la méthode résidentielle ASHRAE (apports solaires de pointe) recoupée par un calcul d'ensoleillement par ciel clair, et de catalogues de radiateurs. Chaque correction a été contre-vérifiée ; en cas de doute, la valeur d'origine a été conservée.
+
+| Table | Entrée | Avant | Après | Raison |
+|---|---|---|---|---|
+| Zones | H1 | -7 °C | **-10 °C** | Températures de base de la zone H1 en plaine (Lille -9, Lyon -10 ; 3CL -9,5) |
+| Zones | H3 | 0 °C | **-5 °C** | Aucune base à 0 °C en métropole (Marseille, Montpellier -5 ; Corse -2) |
+| Murs | Parpaing / béton banché | R 0,30 | **0,40** | R doit inclure Rsi + Rse ; U0 3CL plafonné à 2,5 |
+| Murs | Mâchefer | R 0,65 | **0,42** | Table 3CL béton de mâchefer, 25 cm |
+| Murs | Brique monomur (nouvelle entrée) | — | **2,1** | Brique alvéolaire 30 cm (3CL) ; séparée de la brique creuse (0,55) |
+| Murs | Béton cellulaire | R 0,70 | **1,43** | 0,70 était un U saisi à la place d'un R (3CL : U 0,70 pour 20 cm) |
+| Toiture | Combles / rampants | R 0,20 | **0,40** | U0 plafond 3CL = 2,5 |
+| Toiture | Terrasse béton | R 0,17 | **0,35** | Dalle + étanchéité + Rsi/Rse |
+| Plancher | Dalle sur terre-plein | R 0,35 | **2,0** | R équivalent sol (Ue 3CL / ISO 13370) : le calcul applique le ΔT extérieur complet |
+| Plancher | Dalle mâchefer sur terre-plein | R 0,55 | **2,1** | Idem |
+| Plancher | Bois / vide sanitaire | R 0,50 | **0,8** | R0 / b, b ≈ 0,8 (vide sanitaire ventilé, EN 12831) |
+| Plancher | Sur cave non chauffée | R 0,45 | **0,8** | R0 / b, b ≈ 0,6 (cave avec soupiraux, EN 12831) |
+| Ventilation | Pas de VMC | 0,3 vol/h | **0,5 vol/h** | Maisons sans VMC (fenêtres, infiltrations) |
+| Vitrages | Simple / double / argon / triple | g 0,85 / 0,60 / 0,55 / 0,50 | **0,60 / 0,52 / 0,45 / 0,40** | g de la fenêtre entière (Sw 3CL), la surface saisie étant la baie |
+| Vitrages | Argon / triple | U 1,3 / 0,8 | **1,4 / 1,0** | Uw 3CL d'une fenêtre (menuiserie comprise), pas Ug du verre |
+| Orientations | S / SE / SO / E / O / NE / NO / N | 150 / 180 / 180 / 130 / 130 / 70 / 70 / 60 | **250 / 240 / 370 / 220 / 390 / 110 / 240 / 70** | Pointe d'été (ASHRAE) : l'Ouest et le Sud-Ouest sont les façades les plus chargées |
+| Radiateurs acier | Type 20 | 1550 W/m² | **1700** | Catalogues Kermi / Purmo (ΔT50) |
+
+Inchangés après contrôle : Sarreguemines -15 °C, H2 -5 °C, températures de confort et base été, pierre, brique creuse, ossature bois, isolants, VMC, apports internes, radiateurs acier (autres types), fonte, aluminium, plafonds Anah 2026 (36 valeurs confirmées).
+
+Impact sur une maison de 100 m² à Sarreguemines (parpaing + PSE 4 cm, combles 10 cm, dalle sur terre-plein, double vitrage ancien) : chauffage 16,7 → 8,2 kW, climatisation 3,5 → 4,5 kW.
+
 ## Points d'attention
 
 - Les puissances de radiateurs existants (acier, fonte, aluminium) sont des **ordres de grandeur ΔT50**, pas des données constructeur certifiées.
