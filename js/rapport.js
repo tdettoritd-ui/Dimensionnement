@@ -19,19 +19,45 @@
   var COULEURS_ANAH = { bleu: [29, 78, 216], jaune: [161, 98, 7], violet: [126, 34, 206], rose: [190, 24, 93] };
 
   // Caractères de Windows-1252 au-delà de Latin-1, acceptés par les polices standard du PDF.
-  var CP1252 = '€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ';
+  var CP1252 = '\u20ac\u201a\u0192\u201e\u2026\u2020\u2021\u02c6\u2030\u0160\u2039\u0152\u017d' +
+    '\u2018\u2019\u201c\u201d\u2022\u2013\u2014\u02dc\u2122\u0161\u203a\u0153\u017e\u0178';
 
-  // Les polices standard du PDF ne couvrent que Windows-1252 : on remplace le reste.
+  // Symboles du logiciel sans équivalent Windows-1252.
+  var SYMBOLES = {
+    '\u2194': '<->', '\u2192': '->', '\u2264': '<=', '\u2265': '>=', '\u2248': 'env.',
+    '\u0394': 'Delta ', '\u03bb': 'lambda', '\u2212': '-'
+  };
+
+  // Lettres hors Windows-1252 courantes dans les noms propres.
+  var TRANSLITTERATION = {
+    '\u0142': 'l', '\u0141': 'L', '\u0131': 'i', '\u0111': 'd', '\u0110': 'D', '\u00df': 'ss'
+  };
+
+  // Remplace un caractère hors Windows-1252 : symbole, translittération, lettre sans accent, sinon « ? ».
+  function remplacer(ch) {
+    if (CP1252.indexOf(ch) >= 0) return ch;
+    if (SYMBOLES[ch]) return SYMBOLES[ch];
+    if (TRANSLITTERATION[ch]) return TRANSLITTERATION[ch];
+    var base = ch.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    return /^[ -\u00ff]+$/.test(base) ? base : '?';
+  }
+
+  // Les polices standard du PDF ne couvrent que Windows-1252 : on adapte le texte.
   function t(s) {
-    return String(s == null ? '' : s)
-      .replace(/[   ]/g, ' ')
-      .replace(/↔/g, '<->').replace(/→/g, '->').replace(/≤/g, '<=').replace(/≥/g, '>=')
-      .replace(/≈/g, 'env.').replace(/Δ/g, 'Delta ').replace(/λ/g, 'lambda').replace(/−/g, '-')
-      .replace(/[^\u0000-ÿ]/g, function (ch) { return CP1252.indexOf(ch) >= 0 ? ch : '?'; });
+    return String(s == null ? '' : s).normalize('NFC')
+      .replace(/[\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufe00-\ufe0f\ufeff]/g, '') // caractères invisibles (copier-coller)
+      .replace(/[\u00a0\u2009\u202f]/g, ' ')
+      .replace(/[\ud800-\udbff][\udc00-\udfff]/g, '') // emoji : sans équivalent dans les polices du PDF
+      .replace(/[^\u0000-\u00ff]/g, remplacer);
   }
 
   function nomFichier(state) {
-    var client = (state.client.nom || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+    var LIGATURES = { '\u0153': 'oe', '\u0152': 'OE', '\u00e6': 'ae', '\u00c6': 'AE' };
+    var client = (state.client.nom || '')
+      .replace(/[\u0153\u0152\u00e6\u00c6\u0142\u0141\u0131\u0111\u0110\u00df]/g, function (ch) {
+        return LIGATURES[ch] || TRANSLITTERATION[ch];
+      })
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       .replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
     return ['Releve', client || 'client', state.client.date].filter(Boolean).join('_') + '.pdf';
   }
@@ -111,12 +137,14 @@
 
     /* --- En-tête entreprise --- */
     var hauteurEntete = 0;
+    var largeurGauche = UTILE * 0.55;
     if (logo) {
       var lh = 28;
       var lw = lh * logo.w / logo.h;
       if (lw > 110) { lw = 110; lh = lw * logo.h / logo.w; }
       doc.addImage(logo.dataUrl, /^data:image\/png/.test(logo.dataUrl) ? 'PNG' : 'JPEG', MARGE, y, lw, lh);
       hauteurEntete = lh;
+      largeurGauche = lw;
     } else {
       police(doc, 16, true, BLEU);
       doc.text(t(ent.nom), MARGE, y + 6);
@@ -125,10 +153,15 @@
       doc.text(activite, MARGE, y + 11);
       hauteurEntete = 9 + activite.length * 3.8;
     }
-    var coordonnees = [ent.adresse, ent.telephone, ent.email, ent.siret ? 'SIRET ' + ent.siret : ''].filter(Boolean);
+    // Coordonnées alignées à droite, coupées pour ne jamais chevaucher le logo.
     police(doc, 8.5, false, GRIS);
+    var largeurDroite = Math.max(UTILE - largeurGauche - 6, 40);
+    var coordonnees = [];
+    [ent.adresse, ent.telephone, ent.email, ent.siret ? 'SIRET ' + ent.siret : ''].filter(Boolean).forEach(function (l) {
+      coordonnees = coordonnees.concat(doc.splitTextToSize(t(l), largeurDroite));
+    });
     coordonnees.forEach(function (l, i) {
-      doc.text(t(l), LARG - MARGE, y + 4 + i * 4, { align: 'right' });
+      doc.text(l, LARG - MARGE, y + 4 + i * 4, { align: 'right' });
     });
     y += Math.max(hauteurEntete, coordonnees.length * 4 + 2) + 4;
 
@@ -231,6 +264,7 @@
       theme: 'grid',
       head: [['Pièce', 'Surface', 'Chauffage', 'Climatisation', 'Radiateur neuf', 'Radiateur existant'].map(t)],
       body: lignesPieces,
+      showFoot: 'lastPage',
       foot: [[t('Total'), t(F.nf(surfaceTotale, 1) + ' m²'), t(F.kW(res.chauffage)), t(F.kW(res.climatisation)), '', '']],
       styles: { font: 'helvetica', fontSize: 8.5, textColor: TEXTE, lineColor: FILET, lineWidth: 0.2, cellPadding: 1.5 },
       headStyles: { fillColor: BLEU, textColor: 255, fontStyle: 'bold' },
@@ -240,19 +274,26 @@
     y = doc.lastAutoTable.finalY + 7;
 
     /* --- Détail des pièces --- */
+    var LARGEUR_LIBELLE = 48;
+
+    // Hauteur estimée d'un bloc pièce (titre + lignes), pour ne pas le couper en bas de page.
+    function hauteurBloc(nom, lignes) {
+      police(doc, 8.5, false, TEXTE);
+      var h = 0;
+      lignes.forEach(function (l) {
+        var n = 0;
+        l[1].split('\n').forEach(function (seg) { n += doc.splitTextToSize(seg, UTILE - LARGEUR_LIBELLE - 3).length; });
+        n = Math.max(n, doc.splitTextToSize(l[0], LARGEUR_LIBELLE - 3).length);
+        h += n * 3.6 + 2.4;
+      });
+      police(doc, 10, true, TEXTE);
+      return h + doc.splitTextToSize(nom, LARGEUR_LIBELLE - 3).length * 4.3 + 3;
+    }
+
     state.pieces.forEach(function (p, i) {
       var r = res.pieces[i];
-      sautSiBesoin(60);
-      doc.setFillColor(238, 243, 247);
-      doc.rect(MARGE, y, UTILE, 7, 'F');
-      police(doc, 10, true, TEXTE);
-      doc.text(t(p.nom), MARGE + 2, y + 4.9);
-      police(doc, 8.5, false, TEXTE);
-      doc.text(t(F.kW(r.chauffage) + ' chauffage · ' + F.kW(r.climatisation) + ' clim'), LARG - MARGE - 2, y + 4.9, { align: 'right' });
       var vitrages = F.lignesVitrages(p, r);
-      var opts = stylesTableau(48);
-      opts.startY = y + 8;
-      opts.body = [
+      var lignes = [
         ['Dimensions', (p.longueur || '?') + ' × ' + (p.largeur || '?') + ' × ' + (p.hauteur || '?') + ' m · ' + F.nf(r.surface, 1) + ' m² · ' + F.nf(r.volume, 1) + ' m³'],
         ['Murs ext. exposés', (F.avecUnite(p.lineaire, 'ml') || '—') + ' · sous toiture : ' + F.texteOuiNon(p.sousToiture)],
         ['Vitrages', vitrages.length ? vitrages.join('\n') : '—'],
@@ -262,6 +303,21 @@
         ['Radiateur neuf préconisé', F.textePalierRadiateur(r.radiateurNeuf)],
         ['Radiateur existant', F.texteRadiateurExistant(p, r)]
       ].map(function (l) { return [t(l[0]), t(l[1])]; });
+      var nom = t(p.nom);
+      sautSiBesoin(Math.min(hauteurBloc(nom, lignes) * 1.1, HAUT - BAS - MARGE - 2));
+
+      // Le titre de la pièce est l'en-tête du tableau : répété si le bloc déborde sur la page suivante,
+      // et contenu dans sa colonne (un nom long passe à la ligne au lieu de chevaucher les puissances).
+      var opts = stylesTableau(LARGEUR_LIBELLE);
+      opts.startY = y;
+      opts.head = [[nom, {
+        content: t(F.kW(r.chauffage) + ' chauffage · ' + F.kW(r.climatisation) + ' clim'),
+        styles: { halign: 'right', fontStyle: 'normal', fontSize: 8.5 }
+      }]];
+      opts.headStyles = { fillColor: [238, 243, 247], textColor: TEXTE, fontStyle: 'bold', fontSize: 10, lineWidth: 0 };
+      opts.showHead = 'everyPage';
+      opts.rowPageBreak = 'avoid';
+      opts.body = lignes;
       doc.autoTable(opts);
       y = doc.lastAutoTable.finalY + 6;
     });

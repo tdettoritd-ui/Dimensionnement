@@ -1,6 +1,6 @@
 // Service worker : met l'application en cache pour un usage hors ligne sur le terrain.
 // Incrémenter VERSION à chaque modification des fichiers listés.
-var VERSION = 'releve-pac-v3';
+var VERSION = 'releve-pac-v4';
 var FICHIERS = [
   './',
   './index.html',
@@ -13,7 +13,11 @@ var FICHIERS = [
   './js/envoi.js',
   './js/app.js',
   './vendor/jspdf.umd.min.js',
-  './vendor/jspdf.plugin.autotable.min.js',
+  './vendor/jspdf.plugin.autotable.min.js'
+];
+
+// Images : mises en cache une par une, sans bloquer l'installation si l'une manque.
+var IMAGES = [
   './manifest.webmanifest',
   './logo.png',
   './logo-embleme.png',
@@ -24,7 +28,9 @@ var FICHIERS = [
 
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(VERSION).then(function (c) {
-    return c.addAll(FICHIERS);
+    return c.addAll(FICHIERS).then(function () {
+      return Promise.all(IMAGES.map(function (url) { return c.add(url).catch(function () {}); }));
+    });
   }).then(function () { return self.skipWaiting(); }));
 });
 

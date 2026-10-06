@@ -383,13 +383,23 @@ table.mini tr.total th { color: var(--text); }
 
 .totals-actions { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
 .totals-actions .btn { padding: 6px 2px; font-size: .8rem; flex-direction: column; gap: 1px; min-height: 48px; min-width: 0; }
+.totals-actions .btn span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 380px) {
+  .totals-actions { gap: 4px; }
+  .totals-actions .btn { font-size: .7rem; }
+}
 
 @media (min-width: 640px) {
+  .totals-figures, .totals-actions { max-width: 640px; }
+}
+
+/* Totaux et actions côte à côte seulement quand la place suffit pour 5 boutons « icône + libellé ». */
+@media (min-width: 1024px) {
   :root { --bar-h: 80px; }
   .totals { display: flex; justify-content: center; gap: 12px; }
   .totals-figures, .totals-actions { margin: 0; }
   .totals-figures { flex: 1 1 420px; max-width: 460px; }
-  .totals-actions { flex: 0 1 520px; margin-top: 0; }
+  .totals-actions { flex: 0 0 560px; max-width: none; margin-top: 0; }
   .totals-actions .btn { flex-direction: row; gap: 6px; }
 }
 
@@ -405,7 +415,7 @@ table.mini tr.total th { color: var(--text); }
   color: var(--text);
 }
 .dialog::backdrop { background: rgba(0, 0, 0, .45); }
-.dialog-head { display: flex; justify-content: space-between; align-items: center; padding: 10px 8px 10px 16px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--surface); }
+.dialog-head { z-index: 1; display: flex; justify-content: space-between; align-items: center; padding: 10px 8px 10px 16px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--surface); }
 .dialog-head h2 { font-size: 1.1rem; }
 .dialog-body { padding: 8px 16px 16px; }
 .chantiers { list-style: none; margin: 0; padding: 0; }

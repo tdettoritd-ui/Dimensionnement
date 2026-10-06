@@ -16,7 +16,7 @@
   function num(v) {
     if (v === null || v === undefined || v === '') return 0;
     if (typeof v === 'number') return isFinite(v) ? v : 0;
-    var n = parseFloat(String(v).replace(/[\s  ]/g, '').replace(',', '.'));
+    var n = parseFloat(String(v).replace(/[\s\u00a0\u202f]/g, '').replace(',', '.'));
     return isFinite(n) ? n : 0;
   }
 

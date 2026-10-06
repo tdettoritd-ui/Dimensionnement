@@ -1,5 +1,5 @@
 node_modules/
 .DS_Store
-*.png
-!icon.png
-rapport.pdf
+# captures et rapports de test
+captures/
+*.pdf

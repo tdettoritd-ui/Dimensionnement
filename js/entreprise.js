@@ -79,7 +79,11 @@
   var cacheLogo = null;
 
   function logo() {
-    if (!cacheLogo) cacheLogo = versImage(donnees.logo || FICHIER_LOGO, LARGEUR_MAX_LOGO);
+    if (!cacheLogo) {
+      cacheLogo = versImage(donnees.logo || FICHIER_LOGO, LARGEUR_MAX_LOGO);
+      // Un échec (hors ligne, fichier absent) n'est pas mémorisé : nouvel essai au prochain PDF.
+      cacheLogo.then(function (l) { if (!l) cacheLogo = null; });
+    }
     return cacheLogo;
   }
 
