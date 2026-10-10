@@ -54,6 +54,7 @@
       tBaseEte: '32',
       tConfortEte: '26',
       tConfortHiver: '20',
+      surpuissance: '10',
       murType: 'parpaing',
       plancherType: 'dalle',
       toitureType: 'combles',
@@ -264,6 +265,8 @@
       champ('T° ext. de base été', 'climat.tBaseEte', { kind: 'signed', unite: '°C' }) +
       champ('Confort hiver', 'climat.tConfortHiver', { kind: 'num', unite: '°C' }) +
       champ('Confort été', 'climat.tConfortEte', { kind: 'num', unite: '°C' }) +
+      champ('Surpuissance de relance', 'climat.surpuissance', { kind: 'num', unite: '%', cls: 'span-2',
+        aide: 'Ajoutée à la puissance de chauffage pour remonter en température après un abaissement de nuit ou une absence. 0 % si le chauffage n\'est jamais abaissé.' }) +
       '</div>' +
       '<h3 class="sub-title">Murs</h3><div class="grid">' +
       liste('Type de paroi', 'climat.murType', D.MURS.map(function (m) { return { value: m.id, label: m.label + ' – R ' + nf(m.r, 2) }; }), { cls: 'span-2' }) +
@@ -392,7 +395,8 @@
         champ('Hauteur', 'pieces.' + i + '.hauteur', { kind: 'num', unite: 'm' }) +
         champ('Murs ext. exposés', 'pieces.' + i + '.lineaire', {
           kind: 'num', unite: 'ml',
-          bouton: { action: 'auto-lineaire', label: '2×(L+l)', data: ' data-i="' + i + '"' }
+          bouton: { action: 'auto-lineaire', label: '2×(L+l)', data: ' data-i="' + i + '"' },
+          aide: '', aideId: 'lineaire-aide-' + p.uid
         }) +
         bascule('Pièce sous toiture ?', 'pieces.' + i + '.sousToiture', [['oui', 'Oui'], ['non', 'Non (étage interm.)']], { obligatoire: true, cls: 'span-2' }) +
         bascule('Pièce sur plancher bas ?', 'pieces.' + i + '.surPlancherBas', [['oui', 'Oui'], ['non', 'Non (à l\'étage)']], { obligatoire: true, cls: 'span-2' }) +
@@ -488,6 +492,8 @@
       '<tr><th>Vitrages</th><td>' + nf(d.vitrages, 2) + '</td></tr>' +
       '<tr><th>Renouvellement d\'air</th><td>' + nf(d.air, 2) + '</td></tr>' +
       '<tr class="total"><th>G</th><td>' + nf(r.G, 2) + ' W/K</td></tr>' +
+      '<tr><th>Puissance de base (G × ΔT)</th><td>' + W(r.chauffageBase) + '</td></tr>' +
+      '<tr><th>Surpuissance de relance</th><td>+ ' + nf(r.surpuissance) + ' % = ' + W(r.chauffage) + '</td></tr>' +
       '<tr class="sep"><th colspan="2">Apports été (W)</th></tr>' +
       '<tr><th>Solaires</th><td>' + nf(a.solaires) + '</td></tr>' +
       '<tr><th>Transmission</th><td>' + nf(a.transmission) + '</td></tr>' +
@@ -539,6 +545,15 @@
       var input = document.querySelector('[data-bind="pieces.' + i + '.debit"]');
       if (input) input.placeholder = 'auto : ' + nf(r.debitEstime, 1);
       setHTML('debit-aide-' + p.uid, r.debitAuto ? 'Vide : estimation volume × taux utilisée (' + nf(r.debitEstime, 1) + ' m³/h).' : '');
+      // Alerte : sans linéaire, aucun mur extérieur n'est compté (cause fréquente de sous-évaluation).
+      var aideLineaire = document.getElementById('lineaire-aide-' + p.uid);
+      if (aideLineaire) {
+        var oubli = C.estVide(p.lineaire) && r.surface > 0;
+        aideLineaire.classList.toggle('warn', oubli);
+        setHTML('lineaire-aide-' + p.uid, oubli
+          ? '⚠ Non saisi : aucun mur extérieur n\'est compté. Saisir le linéaire (ou 0 pour une pièce sans mur extérieur).'
+          : '');
+      }
     });
 
     var u = C.uEnveloppe(state.climat);

@@ -207,3 +207,13 @@ test('régime d\'eau : correction des puissances de radiateurs', () => {
   const r = C.calculChantier({ climat: sansPlancher, prime: {}, installation: { regimeEau: '45/35' }, pieces: [piece] });
   proche(r.pieces[0].radiateurExistant.puissance, pac.radiateurExistant.puissance);
 });
+
+test('surpuissance de relance : % ajouté à la puissance de chauffage', () => {
+  const piece = { longueur: '4', largeur: '3', hauteur: '2.5', lineaire: '0', sousToiture: 'non', vitrages: [], debit: '10' };
+  const sans = C.calculPiece(piece, { ...climat, plancherType: 'aucun' });
+  proche(sans.chauffage, 119);
+  const avec = C.calculPiece(piece, { ...climat, plancherType: 'aucun', surpuissance: '15' });
+  proche(avec.chauffageBase, 119);
+  proche(avec.chauffage, 119 * 1.15);
+  assert.equal(C.calculPiece(piece, { ...climat, plancherType: 'aucun', surpuissance: '-5' }).chauffage, sans.chauffage);
+});

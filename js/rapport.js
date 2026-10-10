@@ -225,6 +225,7 @@
         ['Zone', F.libelle(D.ZONES, k.zone)],
         ['Base hiver / été', k.tBaseHiver + ' °C / ' + k.tBaseEte + ' °C'],
         ['Confort hiver / été', k.tConfortHiver + ' °C / ' + k.tConfortEte + ' °C'],
+        ['Surpuissance de relance', (C.estVide(k.surpuissance) ? '0' : k.surpuissance) + ' %'],
         ['Murs', F.libelle(D.MURS, k.murType) + ' + ' + F.isolantTexte(k.isolantMur) + ' (U ' + F.nf(u.mur, 2) + ')'],
         ['Plancher bas', F.libelle(D.PLANCHERS, k.plancherType) + (k.plancherType !== 'aucun' ? ' + ' + F.isolantTexte(k.isolantPlancher) : '') + ' (U ' + F.nf(u.plancher, 2) + ')'],
         ['Toiture', F.libelle(D.TOITURES, k.toitureType) + (k.toitureType !== 'aucune' ? ' + ' + F.isolantTexte(k.isolantToiture) : '') + ' (U ' + F.nf(u.toiture, 2) + ')'],
@@ -301,7 +302,7 @@
         ['Vitrages', vitrages.length ? vitrages.join('\n') : '—'],
         ['Occupants / équipements', (p.occupants || '0') + ' (' + F.libelle(D.ACTIVITES, p.activite) + ') · ' + (p.equipements || '0') + ' W'],
         ['Ventilation', F.nf(r.debit, 1) + ' m³/h' + (r.debitAuto ? ' (estimé)' : '')],
-        ['Déperditions G', F.nf(r.G, 2) + ' W/K'],
+        ['Déperditions G', F.nf(r.G, 2) + ' W/K · base ' + F.W(r.chauffageBase) + ' + relance ' + F.nf(r.surpuissance) + ' %'],
         ['Radiateur neuf préconisé', F.textePalierRadiateur(r.radiateurNeuf) +
           (r.facteurRegime !== 1 && r.radiateurNeuf.valeur ? ' (catalogue ΔT50, régime ' + ins.regimeEau + ' °C)' : '')],
         ['Radiateur existant', F.texteRadiateurExistant(p, r, ins.regimeEau)]

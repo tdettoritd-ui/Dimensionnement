@@ -168,7 +168,10 @@
     var G = deperditions.murs + deperditions.toiture + deperditions.plancher +
       deperditions.vitrages + deperditions.air;
     var deltaHiver = num(climat.tConfortHiver) - num(climat.tBaseHiver);
-    var chauffage = Math.max(G * deltaHiver, 0);
+    var chauffageBase = Math.max(G * deltaHiver, 0);
+    // Surpuissance de relance (% de la puissance de base), après abaissement de nuit ou absence.
+    var surpuissance = Math.max(num(climat.surpuissance), 0);
+    var chauffage = chauffageBase * (1 + surpuissance / 100);
 
     var ecartEte = Math.max(num(climat.tBaseEte) - num(climat.tConfortEte), 0);
     var activite = D.find(D.ACTIVITES, piece.activite);
@@ -206,6 +209,8 @@
       debitEstime: debitEstime(piece, climat),
       deperditions: deperditions,
       G: G,
+      chauffageBase: chauffageBase,
+      surpuissance: surpuissance,
       chauffage: chauffage,
       apports: apports,
       climatisation: climatisation,
