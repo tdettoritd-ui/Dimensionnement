@@ -61,7 +61,9 @@
       isolantMur: { materiau: 'aucun', epaisseur: '' },
       isolantPlancher: { materiau: 'aucun', epaisseur: '' },
       isolantToiture: { materiau: 'aucun', epaisseur: '' },
-      ventilation: 'vmc_auto'
+      ventilation: 'vmc_auto',
+      positionIsolantMur: 'interieur',
+      plancherEtage: 'lourd'
     };
   }
 
@@ -271,10 +273,14 @@
       '<h3 class="sub-title">Murs</h3><div class="grid">' +
       liste('Type de paroi', 'climat.murType', D.MURS.map(function (m) { return { value: m.id, label: m.label + ' – R ' + nf(m.r, 2) }; }), { cls: 'span-2' }) +
       isolant('murs', 'isolantMur') +
+      (c.isolantMur.materiau && c.isolantMur.materiau !== 'aucun'
+        ? bascule('Isolant des murs posé', 'climat.positionIsolantMur', [['interieur', 'Par l\'intérieur (ITI)'], ['exterieur', 'Par l\'extérieur (ITE)']], { obligatoire: true, cls: 'span-2' })
+        : '') +
       '</div>' +
       '<h3 class="sub-title">Plancher bas</h3><div class="grid">' +
       liste('Plancher bas', 'climat.plancherType', D.PLANCHERS.map(function (m) { return { value: m.id, label: m.label + (m.r ? ' – R ' + nf(m.r, 2) : '') }; }), { cls: 'span-2' }) +
       (c.plancherType !== 'aucun' ? isolant('plancher', 'isolantPlancher') : '') +
+      bascule('Planchers entre étages', 'climat.plancherEtage', D.PLANCHERS_ETAGE.map(function (p) { return [p.id, p.label]; }), { obligatoire: true, cls: 'span-2' }) +
       '</div>' +
       '<h3 class="sub-title">Toiture / plafond</h3><div class="grid">' +
       liste('Toiture / plafond', 'climat.toitureType', D.TOITURES.map(function (m) { return { value: m.id, label: m.label + (m.r ? ' – R ' + nf(m.r, 2) : '') }; }), { cls: 'span-2' }) +
@@ -467,6 +473,8 @@
 
   /* ---------- Résultats (mis à jour à chaque frappe, sans reconstruire les champs) ---------- */
 
+  var LIBELLES_ISOLATION = F.LIBELLES_ISOLATION;
+
   function blocResultats(r) {
     var d = r.deperditions;
     var a = r.apports;
@@ -490,6 +498,7 @@
       '<tr><th>Toiture</th><td>' + nf(d.toiture, 2) + '</td></tr>' +
       '<tr><th>Plancher</th><td>' + nf(d.plancher, 2) + '</td></tr>' +
       '<tr><th>Vitrages</th><td>' + nf(d.vitrages, 2) + '</td></tr>' +
+      '<tr><th>Ponts thermiques (' + LIBELLES_ISOLATION[r.pontsThermiques.isolation] + ')</th><td>' + nf(d.pontsThermiques, 2) + '</td></tr>' +
       '<tr><th>Renouvellement d\'air</th><td>' + nf(d.air, 2) + '</td></tr>' +
       '<tr class="total"><th>G</th><td>' + nf(r.G, 2) + ' W/K</td></tr>' +
       '<tr><th>Puissance de base (G × ΔT)</th><td>' + W(r.chauffageBase) + '</td></tr>' +

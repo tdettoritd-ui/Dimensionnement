@@ -226,8 +226,10 @@
         ['Base hiver / été', k.tBaseHiver + ' °C / ' + k.tBaseEte + ' °C'],
         ['Confort hiver / été', k.tConfortHiver + ' °C / ' + k.tConfortEte + ' °C'],
         ['Surpuissance de relance', (C.estVide(k.surpuissance) ? '0' : k.surpuissance) + ' %'],
-        ['Murs', F.libelle(D.MURS, k.murType) + ' + ' + F.isolantTexte(k.isolantMur) + ' (U ' + F.nf(u.mur, 2) + ')'],
+        ['Murs', F.libelle(D.MURS, k.murType) + ' + ' + F.isolantTexte(k.isolantMur) + ' (U ' + F.nf(u.mur, 2) + ')' +
+          ' – ponts thermiques : ' + F.LIBELLES_ISOLATION[C.isolationMur(k)]],
         ['Plancher bas', F.libelle(D.PLANCHERS, k.plancherType) + (k.plancherType !== 'aucun' ? ' + ' + F.isolantTexte(k.isolantPlancher) : '') + ' (U ' + F.nf(u.plancher, 2) + ')'],
+        ['Planchers entre étages', F.libelle(D.PLANCHERS_ETAGE, k.plancherEtage || 'lourd')],
         ['Toiture', F.libelle(D.TOITURES, k.toitureType) + (k.toitureType !== 'aucune' ? ' + ' + F.isolantTexte(k.isolantToiture) : '') + ' (U ' + F.nf(u.toiture, 2) + ')'],
         ['Ventilation', F.libelle(D.VENTILATIONS, k.ventilation)]
       ]],
@@ -302,7 +304,8 @@
         ['Vitrages', vitrages.length ? vitrages.join('\n') : '—'],
         ['Occupants / équipements', (p.occupants || '0') + ' (' + F.libelle(D.ACTIVITES, p.activite) + ') · ' + (p.equipements || '0') + ' W'],
         ['Ventilation', F.nf(r.debit, 1) + ' m³/h' + (r.debitAuto ? ' (estimé)' : '')],
-        ['Déperditions G', F.nf(r.G, 2) + ' W/K · base ' + F.W(r.chauffageBase) + ' + relance ' + F.nf(r.surpuissance) + ' %'],
+        ['Déperditions G', F.nf(r.G, 2) + ' W/K (dont ponts thermiques ' + F.nf(r.deperditions.pontsThermiques, 2) + ') · base ' +
+          F.W(r.chauffageBase) + ' + relance ' + F.nf(r.surpuissance) + ' %'],
         ['Radiateur neuf préconisé', F.textePalierRadiateur(r.radiateurNeuf) +
           (r.facteurRegime !== 1 && r.radiateurNeuf.valeur ? ' (catalogue ΔT50, régime ' + ins.regimeEau + ' °C)' : '')],
         ['Radiateur existant', F.texteRadiateurExistant(p, r, ins.regimeEau)]

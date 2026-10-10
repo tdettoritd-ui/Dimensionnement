@@ -47,11 +47,19 @@ Par pièce :
 - `S = L × l` ; `Smur = max(linéaire ext. × H − Σ vitrages, 0)`
 - `U paroi = 1 / (R base + épaisseur(m) / λ)` ; toiture : U = 0 si la pièce n'est pas sous toiture ou si « Aucune » ; plancher : U = 0 si la pièce n'est pas sur plancher bas (étage) ou si « Aucun »
 - U vitrage = U du type − 0,2 si volet roulant, minimum 0,5 W/m².K
-- `G = U mur·Smur + U toit·S + U plancher·S + Σ U vitrage·surface + 0,34·débit`
-- Chauffage = `max(G × (T confort hiver − T base hiver), 0)`
+- `G = U mur·Smur + U toit·S + U plancher·S + Σ U vitrage·surface + ponts thermiques + 0,34·débit`
+- Chauffage = `max(G × (T confort hiver − T base hiver), 0) × (1 + surpuissance de relance %)` (10 % par défaut, réglable dans « Climat »)
 - Climatisation = apports solaires (surface × g × rayonnement) + transmission `(U mur·Smur + U toit·S) × écart été` + ventilation `0,34·débit·écart été` + internes (occupants × W/activité + équipements)
 
 Totaux : somme des pièces ; palier PAC/clim = plus petit palier ≥ total (au-delà de 28 kW : étude multi-splits).
+
+**Ponts thermiques** (3CL-DPE 2021, annexe 1 § 3.4 ; valeurs ψ de la table `PONTS_THERMIQUES` de `js/data.js`) : `Σ ψ × longueur` par pièce, ψ selon l'isolation des murs (non isolés ; par l'intérieur ITI ; par l'extérieur ITE ; isolation répartie pour monomur, béton cellulaire et ossature bois) et selon que le plancher ou la toiture sont isolés. Longueurs déduites de la pièce :
+- plancher bas / mur = linéaire L (plancher lourd seulement : pas pour plancher bois ni ossature bois) ;
+- plancher haut / mur = L si la toiture est lourde (terrasse, combles sur dalle béton / hourdis) ; combles bois : 0 ;
+- plancher intermédiaire / mur = 0,5 × L par face d'étage (sol d'une pièce d'étage, plafond d'une pièce sous un étage) ; 0 si les planchers d'étage sont en bois ;
+- refend / mur = 0,25 × H par pièce ayant des murs extérieurs ;
+- menuiserie / mur = Σ 4√S par baie (saisie rapide : max(4√S ; 3 × S)), pose au nu intérieur.
+En ITI, les planchers d'étage et les refends dominent ; en ITE, ce sont le plancher bas et les tableaux de fenêtres.
 
 **Radiateurs et régime d'eau** : les puissances catalogue (radiateurs neufs et tables des radiateurs existants) sont données à ΔT50, c'est-à-dire pour une eau à 75/65 °C et 20 °C ambiant. Le régime d'eau choisi dans « Installation » (55/45 °C par défaut) les corrige selon la loi EN 442 : `P = P50 × (ΔTlm / ΔTlm 75/65/20)^1,3`, soit environ ×0,87 en 70/60, ×0,51 en 55/45, ×0,40 en 50/40 et ×0,30 en 45/35. Radiateur existant « Suffisant » si sa puissance au régime choisi ≥ 95 % du besoin ; radiateur neuf = plus petit palier catalogue dont la puissance au régime choisi couvre le besoin (au-delà de 3 000 W catalogue : plusieurs émetteurs).
 
@@ -82,6 +90,7 @@ Les tables de `js/data.js` ont été contrôlées et corrigées à partir des ta
 | Vitrages | Argon / triple | U 1,3 / 0,8 | **1,4 / 1,0** | Uw 3CL d'une fenêtre (menuiserie comprise), pas Ug du verre |
 | Orientations | S / SE / SO / E / O / NE / NO / N | 150 / 180 / 180 / 130 / 130 / 70 / 70 / 60 | **250 / 240 / 370 / 220 / 390 / 110 / 240 / 70** | Pointe d'été (ASHRAE) : l'Ouest et le Sud-Ouest sont les façades les plus chargées |
 | Radiateurs acier | Type 20 | 1550 W/m² | **1700** | Catalogues Kermi / Purmo (ΔT50) |
+| Toiture | Combles perdus sur dalle béton / hourdis (nouvelle entrée) | — | **R 0,40** + pont thermique plancher haut | Fréquent dans les pavillons 1950-1980 (Uph0 3CL 2,5) |
 
 Inchangés après contrôle : Sarreguemines -15 °C, H2 -5 °C, températures de confort et base été, pierre, brique creuse, ossature bois, isolants, VMC, apports internes, radiateurs acier (autres types), fonte, aluminium, plafonds Anah 2026 (36 valeurs confirmées).
 

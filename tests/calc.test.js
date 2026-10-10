@@ -75,10 +75,15 @@ test('calcul pièce complet', () => {
   proche(r.smur, smur);
   proche(r.debit, debit);
   assert.equal(r.debitAuto, true);
-  const G = uMur * smur + uToit * 20 + uPlancher * 20 + (vit('double').u - 0.2) * 2 + 0.34 * debit;
+  // Ponts thermiques (ITI par défaut, dalle non isolée, combles bois) : plancher bas + refend + menuiserie.
+  const PT = D.PONTS_THERMIQUES;
+  const pt = PT.plancherBas.iti[0] * 9 + PT.refend.iti * PT.refendParPiece * 2.5 + PT.menuiserie.iti * 4 * Math.sqrt(2);
+  proche(r.pontsThermiques.total, pt);
+  const G = uMur * smur + uToit * 20 + uPlancher * 20 + (vit('double').u - 0.2) * 2 + pt + 0.34 * debit;
   proche(r.G, G);
   proche(r.chauffage, G * 35);
-  const clim = 2 * vit('double').g * soleil('S') + (uMur * smur + uToit * 20) * 6 + 0.34 * debit * 6 + 2 * 70 + 150;
+  const ptEte = pt - PT.plancherBas.iti[0] * 9;
+  const clim = 2 * vit('double').g * soleil('S') + (uMur * smur + uToit * 20 + ptEte) * 6 + 0.34 * debit * 6 + 2 * 70 + 150;
   proche(r.climatisation, clim);
 });
 
@@ -216,4 +221,28 @@ test('surpuissance de relance : % ajouté à la puissance de chauffage', () => {
   proche(avec.chauffageBase, 119);
   proche(avec.chauffage, 119 * 1.15);
   assert.equal(C.calculPiece(piece, { ...climat, plancherType: 'aucun', surpuissance: '-5' }).chauffage, sans.chauffage);
+});
+
+test('ponts thermiques 3CL selon la position de l\'isolant des murs', () => {
+  const c = { ...climat, isolantToiture: { materiau: 'laine_verre', epaisseur: '20' } };
+  const sejour = { longueur: '5', largeur: '5', hauteur: '2,5', lineaire: '10',
+    vitrages: [{ orientation: 'S', type: 'double_argon', surface: '1,5', volet: 'non' }, { orientation: 'O', type: 'double_argon', surface: '2,5', volet: 'non' }] };
+  // Valeurs contre-vérifiées (plain-pied, dalle non isolée, combles bois) :
+  proche(C.pontsThermiques(sejour, c).total, 3.6125, 1e-3); // ITI
+  proche(C.pontsThermiques(sejour, { ...c, positionIsolantMur: 'exterieur' }).total, 7.787, 1e-3); // ITE
+  proche(C.pontsThermiques(sejour, { ...c, isolantMur: { materiau: 'aucun', epaisseur: '' } }).total, 8.621, 1e-3); // non isolé
+  assert.equal(C.isolationMur({ ...c, murType: 'monomur', isolantMur: { materiau: 'aucun' } }), 'itr');
+  assert.equal(C.isolationMur({ ...c, murType: 'monomur', positionIsolantMur: 'exterieur' }), 'ite_itr');
+  // Sans mur extérieur : aucun pont thermique.
+  assert.equal(C.pontsThermiques({ ...sejour, lineaire: '' }, c).total, 0);
+  // Ossature bois : seul le refend reste.
+  const bois = C.pontsThermiques(sejour, { ...c, murType: 'ossature_bois' });
+  proche(bois.total, D.PONTS_THERMIQUES.refend.iti_itr * 0.25 * 2.5);
+  // Étage en ITI : plancher intermédiaire (moitié par face) ; nul si plancher d'étage en bois.
+  const etage = { ...sejour, surPlancherBas: 'non', sousToiture: 'non' };
+  proche(C.pontsThermiques(etage, c).detail.plancherIntermediaire, 0.92 * 10);
+  assert.equal(C.pontsThermiques(etage, { ...c, plancherEtage: 'leger' }).detail.plancherIntermediaire, 0);
+  // Combles sur dalle béton : pont thermique plancher haut ; combles bois : aucun.
+  proche(C.pontsThermiques(sejour, { ...c, toitureType: 'combles_dalle' }).detail.plancherHaut, 0.75 * 10);
+  assert.equal(C.pontsThermiques(sejour, c).detail.plancherHaut, 0);
 });

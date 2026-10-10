@@ -101,7 +101,14 @@
     return desc + ' → ' + puissance + ' · ' + (ex.suffisant ? 'Suffisant' : 'Insuffisant (manque ' + W(ex.manque) + ')');
   }
 
+  // Type d'isolation des murs (ponts thermiques), tel que renvoyé par Calc.isolationMur.
+  var LIBELLES_ISOLATION = {
+    non_isole: 'murs non isolés', iti: 'ITI', ite: 'ITE', itr: 'isolation répartie',
+    iti_itr: 'ITI sur isolation répartie', ite_itr: 'ITE sur isolation répartie'
+  };
+
   root.Fmt = {
+    LIBELLES_ISOLATION: LIBELLES_ISOLATION,
     esc: esc,
     nf: nf,
     kW: kW,

@@ -28,15 +28,16 @@
     { id: 'parpaing', label: 'Parpaing / béton banché', r: 0.40 },
     { id: 'machefer', label: 'Mâchefer (parpaing / agglo)', r: 0.42 },
     { id: 'brique_creuse', label: 'Brique creuse (20-25 cm)', r: 0.55 },
-    { id: 'monomur', label: 'Brique monomur / alvéolaire (30-37,5 cm)', r: 2.1 },
-    { id: 'beton_cellulaire', label: 'Béton cellulaire', r: 1.43 },
-    { id: 'ossature_bois', label: 'Ossature bois', r: 0.30 }
+    { id: 'monomur', label: 'Brique monomur / alvéolaire (30-37,5 cm)', r: 2.1, itr: true },
+    { id: 'beton_cellulaire', label: 'Béton cellulaire', r: 1.43, itr: true },
+    { id: 'ossature_bois', label: 'Ossature bois', r: 0.30, itr: true, bois: true }
   ];
 
   // Résistance de base toiture (m².K/W) — r null : U = 0
   var TOITURES = [
     { id: 'combles', label: 'Combles / rampants (structure bois)', r: 0.40 },
-    { id: 'terrasse', label: 'Toiture terrasse (structure béton)', r: 0.35 },
+    { id: 'combles_dalle', label: 'Combles perdus sur dalle béton / hourdis', r: 0.40, lourd: true },
+    { id: 'terrasse', label: 'Toiture terrasse (structure béton)', r: 0.35, lourd: true },
     { id: 'aucune', label: 'Aucune (étage intermédiaire)', r: null }
   ];
 
@@ -47,10 +48,39 @@
   var PLANCHERS = [
     { id: 'dalle', label: 'Dalle béton sur terre-plein', r: 2.0 },
     { id: 'dalle_machefer', label: 'Dalle mâchefer sur terre-plein', r: 2.1 },
-    { id: 'bois_vs', label: 'Plancher bois / vide sanitaire', r: 0.8 },
+    { id: 'bois_vs', label: 'Plancher bois / vide sanitaire', r: 0.8, leger: true },
     { id: 'cave', label: 'Sur cave non chauffée', r: 0.8 },
     { id: 'aucun', label: 'Aucun (étage intermédiaire)', r: null }
   ];
+
+  // Position de l'isolant rapporté sur les murs : détermine les ponts thermiques.
+  var POSITIONS_ISOLANT_MUR = [
+    { id: 'interieur', label: 'Par l\'intérieur (ITI, doublage)' },
+    { id: 'exterieur', label: 'Par l\'extérieur (ITE)' }
+  ];
+
+  // Planchers entre étages : un plancher bois n'a pas de pont thermique avec les murs.
+  var PLANCHERS_ETAGE = [
+    { id: 'lourd', label: 'Béton / hourdis' },
+    { id: 'leger', label: 'Bois sur solives' }
+  ];
+
+  // Ponts thermiques ψ (W/m.K) : 3CL-DPE 2021, annexe 1 § 3.4 (table « pont_thermique », ids 1 à 137,
+  // transcription Open3CL recoupée). Clé = isolation du mur : non isolé, ITI, ITE, ITR (isolation
+  // répartie : monomur, béton cellulaire, ossature bois), ou ITI / ITE sur mur ITR.
+  // plancherBas / plancherHaut : [plancher non isolé, plancher isolé]. Menuiseries posées au nu intérieur.
+  var PONTS_THERMIQUES = {
+    plancherBas: { non_isole: [0.39, 0.80], iti: [0.31, 0.71], ite: [0.49, 0.64], itr: [0.35, 0.45], iti_itr: [0.31, 0.45], ite_itr: [0.35, 0.45] },
+    plancherHaut: { non_isole: [0.30, 0.40], iti: [0.27, 0.75], ite: [0.55, 0.58], itr: [0.40, 0.48], iti_itr: [0.27, 0.48], ite_itr: [0.40, 0.48] },
+    plancherIntermediaire: { non_isole: 0.86, iti: 0.92, ite: 0.13, itr: 0.24, iti_itr: 0.24, ite_itr: 0.13 },
+    refend: { non_isole: 0.73, iti: 0.82, ite: 0.13, itr: 0.20, iti_itr: 0.20, ite_itr: 0.13 },
+    menuiserie: { non_isole: 0.38, iti: 0, ite: 0.25, itr: 0.20, iti_itr: 0, ite_itr: 0.20 },
+    // Longueur de refend (mur intérieur lourd contre mur extérieur) comptée par pièce : 0,25 × hauteur
+    // (moyenne observée sur 127 maisons, chaque jonction étant partagée entre deux pièces).
+    refendParPiece: 0.25,
+    // Saisie rapide des vitrages : périmètre des menuiseries ≈ 3 m par m² de baie (médiane des DPE).
+    perimetreRapide: 3.0
+  };
 
   // Conductivité des isolants (W/m.K) — lambda null : R isolant = 0
   var ISOLANTS = [
@@ -198,6 +228,9 @@
     TOITURES: TOITURES,
     PLANCHERS: PLANCHERS,
     ISOLANTS: ISOLANTS,
+    POSITIONS_ISOLANT_MUR: POSITIONS_ISOLANT_MUR,
+    PLANCHERS_ETAGE: PLANCHERS_ETAGE,
+    PONTS_THERMIQUES: PONTS_THERMIQUES,
     VITRAGES: VITRAGES,
     ORIENTATIONS: ORIENTATIONS,
     ORIENTATION_MIXTE: ORIENTATION_MIXTE,

@@ -134,6 +134,65 @@
     return Math.pow(ecartLogarithmique(regime.depart, regime.retour, ambiance) / reference, D.EXPOSANT_RADIATEUR);
   }
 
+  // Type d'isolation du mur pour les ponts thermiques : non_isole, iti, ite, itr, iti_itr, ite_itr.
+  // Position non renseignée : par l'intérieur (cas le plus courant, défaut 3CL).
+  function isolationMur(climat) {
+    var mur = D.find(D.MURS, climat.murType) || {};
+    if (!(rIsolant(climat.isolantMur) > 0)) return mur.itr ? 'itr' : 'non_isole';
+    var position = climat.positionIsolantMur === 'exterieur' ? 'ite' : 'iti';
+    return mur.itr ? position + '_itr' : position;
+  }
+
+  // Ponts thermiques de la pièce (W/K) = Σ ψ × longueur, d'après la 3CL-DPE 2021 (§ 3.4).
+  // Les longueurs sont déduites de la pièce : linéaire de murs extérieurs L, hauteur H, baies.
+  function pontsThermiques(piece, climat) {
+    var T = D.PONTS_THERMIQUES;
+    var iso = isolationMur(climat);
+    var mur = D.find(D.MURS, climat.murType) || {};
+    var plancher = D.find(D.PLANCHERS, climat.plancherType);
+    var toit = D.find(D.TOITURES, climat.toitureType);
+    var L = Math.max(num(piece.lineaire), 0);
+    var H = Math.max(num(piece.hauteur), 0);
+    var l = { plancherBas: 0, plancherHaut: 0, plancherIntermediaire: 0, refend: 0, menuiserie: 0 };
+    var d = { plancherBas: 0, plancherHaut: 0, plancherIntermediaire: 0, refend: 0, menuiserie: 0 };
+    if (L > 0) {
+      // Sol : plancher bas lourd, sinon plancher d'étage (moitié comptée de chaque côté).
+      if (piece.surPlancherBas !== 'non' && plancher && plancher.r !== null) {
+        if (!mur.bois && !plancher.leger) {
+          l.plancherBas = L;
+          d.plancherBas = T.plancherBas[iso][rIsolant(climat.isolantPlancher) > 0 ? 1 : 0] * L;
+        }
+      } else {
+        l.plancherIntermediaire += 0.5 * L;
+      }
+      // Plafond : toiture lourde (terrasse, dalle sous combles), sinon plancher d'étage.
+      if (piece.sousToiture !== 'non' && toit && toit.r !== null) {
+        if (!mur.bois && toit.lourd) {
+          l.plancherHaut = L;
+          d.plancherHaut = T.plancherHaut[iso][rIsolant(climat.isolantToiture) > 0 ? 1 : 0] * L;
+        }
+      } else {
+        l.plancherIntermediaire += 0.5 * L;
+      }
+      if (climat.plancherEtage === 'leger') l.plancherIntermediaire = 0;
+      d.plancherIntermediaire = T.plancherIntermediaire[iso] * l.plancherIntermediaire;
+      l.refend = T.refendParPiece * H;
+      d.refend = T.refend[iso] * l.refend;
+      if (!mur.bois) {
+        if (piece.vitrageMode === 'rapide') {
+          var S = 0;
+          vitragesPiece(piece).forEach(function (v) { S += Math.max(num(v.surface), 0); });
+          l.menuiserie = S > 0 ? Math.max(4 * Math.sqrt(S), T.perimetreRapide * S) : 0;
+        } else {
+          (piece.vitrages || []).forEach(function (v) { l.menuiserie += 4 * Math.sqrt(Math.max(num(v.surface), 0)); });
+        }
+        d.menuiserie = T.menuiserie[iso] * l.menuiserie;
+      }
+    }
+    var total = d.plancherBas + d.plancherHaut + d.plancherIntermediaire + d.refend + d.menuiserie;
+    return { isolation: iso, longueurs: l, detail: d, total: total };
+  }
+
   // regimeEau (facultatif) : régime d'eau des radiateurs, id de D.REGIMES_EAU.
   function calculPiece(piece, climat, regimeEau) {
     var u = uEnveloppe(climat);
@@ -157,16 +216,18 @@
 
     var smur = Math.max(num(piece.lineaire) * num(piece.hauteur) - surfaceVitree, 0);
     var debit = debitRetenu(piece, climat);
+    var pt = pontsThermiques(piece, climat);
 
     var deperditions = {
       murs: u.mur * smur,
       toiture: uToiture * s,
       plancher: uPlancher * s,
       vitrages: deperditionsVitrages,
+      pontsThermiques: pt.total,
       air: COEF_AIR * debit
     };
     var G = deperditions.murs + deperditions.toiture + deperditions.plancher +
-      deperditions.vitrages + deperditions.air;
+      deperditions.vitrages + deperditions.pontsThermiques + deperditions.air;
     var deltaHiver = num(climat.tConfortHiver) - num(climat.tBaseHiver);
     var chauffageBase = Math.max(G * deltaHiver, 0);
     // Surpuissance de relance (% de la puissance de base), après abaissement de nuit ou absence.
@@ -177,7 +238,8 @@
     var activite = D.find(D.ACTIVITES, piece.activite);
     var apports = {
       solaires: apportsSolaires,
-      transmission: (u.mur * smur + uToiture * s) * ecartEte,
+      // Le plancher bas (sur sol ou local non chauffé) n'apporte pas de chaleur l'été.
+      transmission: (u.mur * smur + uToiture * s + pt.total - pt.detail.plancherBas) * ecartEte,
       ventilation: COEF_AIR * debit * ecartEte,
       internes: Math.max(num(piece.occupants), 0) * (activite ? activite.w : 0) + Math.max(num(piece.equipements), 0)
     };
@@ -208,6 +270,7 @@
       debitAuto: estVide(piece.debit),
       debitEstime: debitEstime(piece, climat),
       deperditions: deperditions,
+      pontsThermiques: pt,
       G: G,
       chauffageBase: chauffageBase,
       surpuissance: surpuissance,
@@ -269,6 +332,8 @@
     palier: palier,
     radiateurExistant: radiateurExistant,
     facteurRegime: facteurRegime,
+    isolationMur: isolationMur,
+    pontsThermiques: pontsThermiques,
     rayonnement: rayonnement,
     vitragesPiece: vitragesPiece,
     calculPiece: calculPiece,
