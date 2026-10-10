@@ -73,6 +73,7 @@
       hauteur: '2,5',
       lineaire: '',
       sousToiture: 'oui',
+      surPlancherBas: 'oui',
       vitrageMode: 'detail',
       vitrages: [],
       vitrageRapide: { niveau: 'moyen', orientation: 'mixte', type: 'double', volet: 'non' },
@@ -96,7 +97,8 @@
       installation: {
         ballonTampon: '', volumeTampon: '', ecsPac: '', ballonThermo: '', ecsEmplacement: '',
         electrique: '', regulation: '', miniTableau: '',
-        distUiUe: '', distUeTableau: '', distUiTableau: '', condensats: ''
+        distUiUe: '', distUeTableau: '', distUiTableau: '', condensats: '',
+        regimeEau: '55/45'
       },
       prime: { personnes: '', rfr: '', zone: 'hors_idf' },
       pieces: [nouvellePiece(1)]
@@ -286,6 +288,10 @@
     var emplacement = bascule('ECS : intégré ou déporté ?', 'installation.ecsEmplacement', [['integre', 'Intégré'], ['deporte', 'Déporté']], { cls: 'span-2' });
     return encart('installation', 'Installation', '',
       '<div class="grid">' +
+      liste('Régime d\'eau des radiateurs', 'installation.regimeEau', table2options(D.REGIMES_EAU), { cls: 'span-2' }) +
+      '</div>' +
+      '<p class="hint">Sert à vérifier les radiateurs existants et à choisir les neufs : les puissances catalogue sont données à ΔT50 (eau à 75 °C).</p>' +
+      '<div class="grid">' +
       bascule('Ballon tampon', 'installation.ballonTampon') +
       (i.ballonTampon === 'oui' ? champ('Volume du ballon tampon', 'installation.volumeTampon', { kind: 'num', unite: 'L' }) : '<div class="spacer"></div>') +
       bascule('ECS produite par la PAC ?', 'installation.ecsPac') +
@@ -299,7 +305,7 @@
       champ('Distance UI ↔ tableau', 'installation.distUiTableau', { kind: 'num', unite: 'm' }) +
       bascule('Évacuation condensats à proximité', 'installation.condensats') +
       '</div>' +
-      '<p class="hint">Informations de chiffrage : sans effet sur le calcul.</p>');
+      '<p class="hint">Les autres informations servent au chiffrage, sans effet sur le calcul.</p>');
   }
 
   function renderPrime() {
@@ -370,7 +376,8 @@
     html += '</div>';
     if (r.materiau) {
       html += '<div class="radex" id="radex-' + p.uid + '"></div>' +
-        '<p class="hint warn">Valeurs indicatives ΔT50 (ordre de grandeur, non certifiées) : à recouper avec la documentation constructeur.</p>';
+        '<p class="hint">Puissance ramenée au régime d\'eau ' + F.esc(state.installation.regimeEau) + ' °C (réglage dans « Installation »).</p>' +
+        '<p class="hint warn">Valeurs catalogue indicatives ΔT50 (ordre de grandeur, non certifiées) : à recouper avec la documentation constructeur.</p>';
     }
     return html;
   }
@@ -388,6 +395,7 @@
           bouton: { action: 'auto-lineaire', label: '2×(L+l)', data: ' data-i="' + i + '"' }
         }) +
         bascule('Pièce sous toiture ?', 'pieces.' + i + '.sousToiture', [['oui', 'Oui'], ['non', 'Non (étage interm.)']], { obligatoire: true, cls: 'span-2' }) +
+        bascule('Pièce sur plancher bas ?', 'pieces.' + i + '.surPlancherBas', [['oui', 'Oui'], ['non', 'Non (à l\'étage)']], { obligatoire: true, cls: 'span-2' }) +
         '</div>' +
         '<h4 class="sub-title">Vitrages</h4>' +
         renderVitrages(p, i) +
@@ -462,7 +470,9 @@
       '<div class="kpi heat"><span>Chauffage</span><strong>' + kW(r.chauffage) + '</strong><small>' + W(r.chauffage) + '</small></div>' +
       '<div class="kpi cool"><span>Climatisation</span><strong>' + kW(r.climatisation) + '</strong><small>' + W(r.climatisation) + '</small></div>' +
       '</div>' +
-      '<div class="reco"><span>Radiateur neuf préconisé</span><strong>' + textePalierRadiateur(r.radiateurNeuf) + '</strong></div>' +
+      '<div class="reco"><span>Radiateur neuf préconisé</span><strong>' + textePalierRadiateur(r.radiateurNeuf) + '</strong>' +
+      (r.facteurRegime !== 1 ? '<small class="reco-note">puissance catalogue ΔT50, pour un régime ' + F.esc(state.installation.regimeEau) + ' °C</small>' : '') +
+      '</div>' +
       '<details class="detail" data-key="detail"><summary>Détail du calcul</summary>' +
       '<table class="mini"><tbody>' +
       '<tr><th>Surface au sol</th><td>' + nf(r.surface, 2) + ' m²</td></tr>' +
@@ -492,7 +502,9 @@
     var badge = ex.suffisant
       ? '<span class="badge ok">Suffisant</span>'
       : '<span class="badge ko">Insuffisant · manque ' + W(ex.manque) + '</span>';
-    return '<span>Puissance existante</span><strong>' + W(ex.puissance) + '</strong>' + badge;
+    var regime = state.installation.regimeEau;
+    return '<span>Puissance existante en ' + F.esc(regime) + ' °C</span><strong>' + W(ex.puissance) + '</strong>' + badge +
+      (r.facteurRegime !== 1 ? '<small class="reco-note">catalogue ΔT50 : ' + W(ex.puissanceCatalogue) + '</small>' : '');
   }
 
   function badgeAnah(anah) {

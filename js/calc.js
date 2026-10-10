@@ -116,12 +116,33 @@
     return Math.max(puissance, 0);
   }
 
-  function calculPiece(piece, climat) {
+  // Écart de température logarithmique moyen entre l'eau du radiateur et la pièce.
+  function ecartLogarithmique(depart, retour, ambiance) {
+    var a = depart - ambiance;
+    var b = retour - ambiance;
+    if (a <= 0 || b <= 0) return 0;
+    return Math.abs(a - b) < 1e-9 ? a : (a - b) / Math.log(a / b);
+  }
+
+  // Coefficient appliqué à une puissance catalogue (ΔT50) pour un régime d'eau donné :
+  // (ΔTlm régime / ΔTlm 75/65/20)^1,3. Régime inconnu ou absent : 1 (référence catalogue).
+  function facteurRegime(regimeId, tAmbiance) {
+    var regime = D.find(D.REGIMES_EAU, regimeId);
+    if (!regime) return 1;
+    var ambiance = estVide(tAmbiance) ? 20 : num(tAmbiance);
+    var reference = ecartLogarithmique(75, 65, 20);
+    return Math.pow(ecartLogarithmique(regime.depart, regime.retour, ambiance) / reference, D.EXPOSANT_RADIATEUR);
+  }
+
+  // regimeEau (facultatif) : régime d'eau des radiateurs, id de D.REGIMES_EAU.
+  function calculPiece(piece, climat, regimeEau) {
     var u = uEnveloppe(climat);
     var s = num(piece.longueur) * num(piece.largeur);
     var volume = s * num(piece.hauteur);
     var sousToiture = piece.sousToiture !== 'non';
     var uToiture = sousToiture ? u.toiture : 0;
+    var surPlancherBas = piece.surPlancherBas !== 'non';
+    var uPlancher = surPlancherBas ? u.plancher : 0;
 
     var surfaceVitree = 0;
     var deperditionsVitrages = 0;
@@ -140,7 +161,7 @@
     var deperditions = {
       murs: u.mur * smur,
       toiture: uToiture * s,
-      plancher: u.plancher * s,
+      plancher: uPlancher * s,
       vitrages: deperditionsVitrages,
       air: COEF_AIR * debit
     };
@@ -159,14 +180,18 @@
     };
     var climatisation = apports.solaires + apports.transmission + apports.ventilation + apports.internes;
 
+    // Radiateurs : puissances catalogue (ΔT50) ramenées au régime d'eau de l'installation.
+    var facteur = facteurRegime(regimeEau, climat.tConfortHiver);
     var existant = radiateurExistant(piece.radiateur);
     var radiateur = null;
     if (existant !== null) {
-      var suffisant = chauffage > 0 ? existant >= SEUIL_RADIATEUR_SUFFISANT * chauffage : true;
+      var puissance = existant * facteur;
+      var suffisant = chauffage > 0 ? puissance >= SEUIL_RADIATEUR_SUFFISANT * chauffage : true;
       radiateur = {
-        puissance: existant,
+        puissance: puissance,
+        puissanceCatalogue: existant,
         suffisant: suffisant,
-        manque: suffisant ? 0 : chauffage - existant
+        manque: suffisant ? 0 : chauffage - puissance
       };
     }
 
@@ -175,7 +200,7 @@
       volume: volume,
       surfaceVitree: surfaceVitree,
       smur: smur,
-      u: { mur: u.mur, toiture: uToiture, plancher: u.plancher },
+      u: { mur: u.mur, toiture: uToiture, plancher: uPlancher },
       debit: debit,
       debitAuto: estVide(piece.debit),
       debitEstime: debitEstime(piece, climat),
@@ -184,13 +209,16 @@
       chauffage: chauffage,
       apports: apports,
       climatisation: climatisation,
-      radiateurNeuf: palier(chauffage, D.PALIERS_RADIATEUR),
+      facteurRegime: facteur,
+      // Palier catalogue (ΔT50) dont la puissance au régime d'eau couvre le besoin.
+      radiateurNeuf: facteur > 0 ? palier(chauffage / facteur, D.PALIERS_RADIATEUR) : { valeur: null, depasse: chauffage > 0 },
       radiateurExistant: radiateur
     };
   }
 
   function calculChantier(chantier) {
-    var pieces = (chantier.pieces || []).map(function (p) { return calculPiece(p, chantier.climat); });
+    var regimeEau = chantier.installation ? chantier.installation.regimeEau : undefined;
+    var pieces = (chantier.pieces || []).map(function (p) { return calculPiece(p, chantier.climat, regimeEau); });
     var chauffage = 0;
     var climatisation = 0;
     pieces.forEach(function (r) { chauffage += r.chauffage; climatisation += r.climatisation; });
@@ -235,6 +263,7 @@
     debitEstime: debitEstime,
     palier: palier,
     radiateurExistant: radiateurExistant,
+    facteurRegime: facteurRegime,
     rayonnement: rayonnement,
     vitragesPiece: vitragesPiece,
     calculPiece: calculPiece,

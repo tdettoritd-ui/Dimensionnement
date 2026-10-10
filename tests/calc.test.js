@@ -173,3 +173,37 @@ test('cohérence des tables de référence', () => {
   // Seuils Anah croissants pour chaque taille de foyer.
   ['hors_idf', 'idf'].forEach(z => D.ANAH[z].seuils.forEach(s => assert.ok(s[0] < s[1] && s[1] < s[2])));
 });
+
+test('pièce à l\'étage : pas de plancher bas', () => {
+  const piece = { longueur: '4', largeur: '3', hauteur: '2.5', lineaire: '0', sousToiture: 'non', vitrages: [], debit: '0' };
+  proche(C.calculPiece(piece, climat).deperditions.plancher, uPlancher * 12);
+  const etage = C.calculPiece({ ...piece, surPlancherBas: 'non' }, climat);
+  assert.equal(etage.deperditions.plancher, 0);
+  assert.equal(etage.u.plancher, 0);
+});
+
+test('régime d\'eau : correction des puissances de radiateurs', () => {
+  // Référence catalogue : 75/65 °C pour 20 °C ambiant → coefficient 1.
+  proche(C.facteurRegime('75/65', '20'), 1);
+  proche(C.facteurRegime(undefined, '20'), 1);
+  // (ΔTlm / 49,83)^1,3 : 55/45 → 0,511 ; 45/35 → 0,297.
+  proche(C.facteurRegime('55/45', '20'), 0.511, 1e-3);
+  proche(C.facteurRegime('45/35', '20'), 0.297, 1e-3);
+  assert.ok(C.facteurRegime('55/45', '22') < C.facteurRegime('55/45', '20'));
+
+  const piece = { longueur: '4', largeur: '3', hauteur: '2.5', lineaire: '0', sousToiture: 'non', vitrages: [], debit: '10',
+    radiateur: { materiau: 'alu', hauteurElement: '600', elements: '2' } };
+  const sansPlancher = { ...climat, plancherType: 'aucun' }; // besoin = 119 W
+  const catalogue = 2 * D.RADIATEURS_ELEMENTS.alu[600];
+  const ref = C.calculPiece(piece, sansPlancher);
+  proche(ref.radiateurExistant.puissance, catalogue);
+  const pac = C.calculPiece(piece, sansPlancher, '45/35');
+  proche(pac.radiateurExistant.puissanceCatalogue, catalogue);
+  proche(pac.radiateurExistant.puissance, catalogue * C.facteurRegime('45/35', '20'));
+  assert.equal(pac.radiateurExistant.suffisant, catalogue * C.facteurRegime('45/35', '20') >= 0.95 * 119);
+  // Radiateur neuf : palier catalogue couvrant le besoin au régime choisi.
+  assert.equal(pac.radiateurNeuf.valeur, D.PALIERS_RADIATEUR.find(p => p * C.facteurRegime('45/35', '20') >= 119));
+  // Le régime est lu dans l'installation par calculChantier.
+  const r = C.calculChantier({ climat: sansPlancher, prime: {}, installation: { regimeEau: '45/35' }, pieces: [piece] });
+  proche(r.pieces[0].radiateurExistant.puissance, pac.radiateurExistant.puissance);
+});

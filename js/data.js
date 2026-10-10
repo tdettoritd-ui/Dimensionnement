@@ -134,6 +134,20 @@
     alu: { 500: 100, 600: 135, 700: 165 }
   };
 
+  // Régimes d'eau (départ / retour, °C). Les puissances catalogue des radiateurs sont données à ΔT50
+  // (75/65 °C pour 20 °C ambiant) ; à plus basse température, elles sont corrigées (voir calc.js).
+  var REGIMES_EAU = [
+    { id: '75/65', label: '75/65 °C – référence catalogue ΔT50 (chaudière)', depart: 75, retour: 65 },
+    { id: '70/60', label: '70/60 °C – chaudière', depart: 70, retour: 60 },
+    { id: '65/55', label: '65/55 °C – PAC très haute température', depart: 65, retour: 55 },
+    { id: '55/45', label: '55/45 °C – PAC haute température', depart: 55, retour: 45 },
+    { id: '50/40', label: '50/40 °C – PAC moyenne température', depart: 50, retour: 40 },
+    { id: '45/35', label: '45/35 °C – PAC basse température', depart: 45, retour: 35 }
+  ];
+
+  // Exposant de la loi d'émission des radiateurs (EN 442) : P = P50 × (ΔTlm / ΔTlm50)^n.
+  var EXPOSANT_RADIATEUR = 1.3;
+
   var MATERIAUX_RADIATEUR = [
     { id: 'acier', label: 'Acier' },
     { id: 'fonte', label: 'Fonte' },
@@ -195,6 +209,8 @@
     RADIATEURS_ACIER: RADIATEURS_ACIER,
     RADIATEURS_ELEMENTS: RADIATEURS_ELEMENTS,
     MATERIAUX_RADIATEUR: MATERIAUX_RADIATEUR,
+    REGIMES_EAU: REGIMES_EAU,
+    EXPOSANT_RADIATEUR: EXPOSANT_RADIATEUR,
     HAUTEURS_ELEMENT: HAUTEURS_ELEMENT,
     ANAH: ANAH,
     CATEGORIES_ANAH: CATEGORIES_ANAH,

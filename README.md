@@ -45,13 +45,15 @@ Pour un usage terrain, héberger le dossier sur n'importe quel hébergement stat
 Par pièce :
 
 - `S = L × l` ; `Smur = max(linéaire ext. × H − Σ vitrages, 0)`
-- `U paroi = 1 / (R base + épaisseur(m) / λ)` ; toiture : U = 0 si la pièce n'est pas sous toiture ou si « Aucune » ; plancher : U = 0 si « Aucun »
+- `U paroi = 1 / (R base + épaisseur(m) / λ)` ; toiture : U = 0 si la pièce n'est pas sous toiture ou si « Aucune » ; plancher : U = 0 si la pièce n'est pas sur plancher bas (étage) ou si « Aucun »
 - U vitrage = U du type − 0,2 si volet roulant, minimum 0,5 W/m².K
 - `G = U mur·Smur + U toit·S + U plancher·S + Σ U vitrage·surface + 0,34·débit`
 - Chauffage = `max(G × (T confort hiver − T base hiver), 0)`
 - Climatisation = apports solaires (surface × g × rayonnement) + transmission `(U mur·Smur + U toit·S) × écart été` + ventilation `0,34·débit·écart été` + internes (occupants × W/activité + équipements)
 
-Totaux : somme des pièces ; palier PAC/clim = plus petit palier ≥ total (au-delà de 28 kW : étude multi-splits). Radiateur neuf : plus petit palier ≥ besoin de la pièce (au-delà de 3 000 W : plusieurs émetteurs). Radiateur existant « Suffisant » si sa puissance ≥ 95 % du besoin.
+Totaux : somme des pièces ; palier PAC/clim = plus petit palier ≥ total (au-delà de 28 kW : étude multi-splits).
+
+**Radiateurs et régime d'eau** : les puissances catalogue (radiateurs neufs et tables des radiateurs existants) sont données à ΔT50, c'est-à-dire pour une eau à 75/65 °C et 20 °C ambiant. Le régime d'eau choisi dans « Installation » (55/45 °C par défaut) les corrige selon la loi EN 442 : `P = P50 × (ΔTlm / ΔTlm 75/65/20)^1,3`, soit environ ×0,87 en 70/60, ×0,51 en 55/45, ×0,40 en 50/40 et ×0,30 en 45/35. Radiateur existant « Suffisant » si sa puissance au régime choisi ≥ 95 % du besoin ; radiateur neuf = plus petit palier catalogue dont la puissance au régime choisi couvre le besoin (au-delà de 3 000 W catalogue : plusieurs émetteurs).
 
 **Saisie rapide des vitrages** : surface vitrée = pourcentage de la surface au sol de la pièce selon le niveau (table `NIVEAUX_VITRAGE` de `js/data.js`), avec une orientation principale, un type de vitrage et la présence de volets. L'orientation « Plusieurs orientations » utilise la moyenne des rayonnements de la table.
 

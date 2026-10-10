@@ -88,14 +88,17 @@
     });
   }
 
-  function texteRadiateurExistant(piece, resultat) {
+  function texteRadiateurExistant(piece, resultat, regimeEau) {
     var ex = resultat.radiateurExistant;
     if (!ex) return '—';
     var pr = piece.radiateur;
     var desc = pr.materiau === 'acier'
       ? 'Acier ' + libelle(D.RADIATEURS_ACIER, pr.typeAcier) + ' ' + (pr.hauteur || '?') + ' × ' + (pr.longueur || '?') + ' cm'
       : libelle(D.MATERIAUX_RADIATEUR, pr.materiau) + ' ' + (pr.elements || '0') + ' élts de ' + pr.hauteurElement + ' mm';
-    return desc + ' → ' + W(ex.puissance) + ' · ' + (ex.suffisant ? 'Suffisant' : 'Insuffisant (manque ' + W(ex.manque) + ')');
+    var puissance = resultat.facteurRegime !== 1
+      ? W(ex.puissanceCatalogue) + ' à ΔT50, soit ' + W(ex.puissance) + ' en ' + regimeEau + ' °C'
+      : W(ex.puissance);
+    return desc + ' → ' + puissance + ' · ' + (ex.suffisant ? 'Suffisant' : 'Insuffisant (manque ' + W(ex.manque) + ')');
   }
 
   root.Fmt = {

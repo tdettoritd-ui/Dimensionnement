@@ -239,7 +239,8 @@
         ['Distance UI ↔ UE', F.avecUnite(ins.distUiUe, 'm')],
         ['Distance UE ↔ tableau', F.avecUnite(ins.distUeTableau, 'm')],
         ['Distance UI ↔ tableau', F.avecUnite(ins.distUiTableau, 'm')],
-        ['Condensats à proximité', F.texteOuiNon(ins.condensats)]
+        ['Condensats à proximité', F.texteOuiNon(ins.condensats)],
+        ['Régime d\'eau radiateurs', ins.regimeEau ? F.libelle(D.REGIMES_EAU, ins.regimeEau) : '']
       ]]
     );
 
@@ -295,13 +296,15 @@
       var vitrages = F.lignesVitrages(p, r);
       var lignes = [
         ['Dimensions', (p.longueur || '?') + ' × ' + (p.largeur || '?') + ' × ' + (p.hauteur || '?') + ' m · ' + F.nf(r.surface, 1) + ' m² · ' + F.nf(r.volume, 1) + ' m³'],
-        ['Murs ext. exposés', (F.avecUnite(p.lineaire, 'ml') || '—') + ' · sous toiture : ' + F.texteOuiNon(p.sousToiture)],
+        ['Murs ext. exposés', (F.avecUnite(p.lineaire, 'ml') || '—') + ' · sous toiture : ' + F.texteOuiNon(p.sousToiture) +
+          ' · sur plancher bas : ' + F.texteOuiNon(p.surPlancherBas)],
         ['Vitrages', vitrages.length ? vitrages.join('\n') : '—'],
         ['Occupants / équipements', (p.occupants || '0') + ' (' + F.libelle(D.ACTIVITES, p.activite) + ') · ' + (p.equipements || '0') + ' W'],
         ['Ventilation', F.nf(r.debit, 1) + ' m³/h' + (r.debitAuto ? ' (estimé)' : '')],
         ['Déperditions G', F.nf(r.G, 2) + ' W/K'],
-        ['Radiateur neuf préconisé', F.textePalierRadiateur(r.radiateurNeuf)],
-        ['Radiateur existant', F.texteRadiateurExistant(p, r)]
+        ['Radiateur neuf préconisé', F.textePalierRadiateur(r.radiateurNeuf) +
+          (r.facteurRegime !== 1 && r.radiateurNeuf.valeur ? ' (catalogue ΔT50, régime ' + ins.regimeEau + ' °C)' : '')],
+        ['Radiateur existant', F.texteRadiateurExistant(p, r, ins.regimeEau)]
       ].map(function (l) { return [t(l[0]), t(l[1])]; });
       var nom = t(p.nom);
       sautSiBesoin(Math.min(hauteurBloc(nom, lignes) * 1.1, HAUT - BAS - MARGE - 2));
