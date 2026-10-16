@@ -43,6 +43,11 @@
     return p.depasse ? textePalierPac(p) : 'Palier ' + textePalierPac(p);
   }
 
+  function textePalierSplit(p) {
+    if (p.depasse) return 'Plusieurs unités';
+    return p.valeur === null ? '—' : nf(p.valeur, p.valeur % 1 ? 1 : 0) + ' kW';
+  }
+
   function textePalierRadiateur(p) {
     if (p.depasse) return 'Plusieurs émetteurs';
     return p.valeur === null ? '—' : W(p.valeur);
@@ -120,6 +125,7 @@
     textePalierPac: textePalierPac,
     palierBarre: palierBarre,
     textePalierRadiateur: textePalierRadiateur,
+    textePalierSplit: textePalierSplit,
     dateFr: dateFr,
     avecUnite: avecUnite,
     isolantTexte: isolantTexte,

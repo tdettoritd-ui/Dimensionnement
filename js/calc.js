@@ -57,14 +57,33 @@
   }
 
   // Rayonnement d'été (W/m²) d'une orientation ; « mixte » = moyenne des orientations.
+  // Moyenne d'une colonne de rayonnement sur les orientations verticales (hors fenêtres de toit).
+  function moyenneVerticales(cle) {
+    var somme = 0;
+    var n = 0;
+    D.ORIENTATIONS.forEach(function (o) {
+      if (!o.toit) { somme += o[cle]; n++; }
+    });
+    return n ? somme / n : 0;
+  }
+
+  // Rayonnement de pointe simultané (maison entière, total chantier) ; « mixte » = moyenne.
   function rayonnement(orientationId) {
-    if (orientationId === D.ORIENTATION_MIXTE.id) {
-      var somme = 0;
-      D.ORIENTATIONS.forEach(function (o) { somme += o.w; });
-      return somme / D.ORIENTATIONS.length;
-    }
+    if (orientationId === D.ORIENTATION_MIXTE.id) return moyenneVerticales('w');
     var o = D.find(D.ORIENTATIONS, orientationId);
     return o ? o.w : 0;
+  }
+
+  // Rayonnement de pointe propre à la pièce (choix du split).
+  function rayonnementPiece(orientationId) {
+    if (orientationId === D.ORIENTATION_MIXTE.id) return moyenneVerticales('wPiece');
+    var o = D.find(D.ORIENTATIONS, orientationId);
+    return o ? o.wPiece : 0;
+  }
+
+  function fenetreDeToit(vitrage) {
+    var o = D.find(D.ORIENTATIONS, vitrage.orientation);
+    return !!(o && o.toit);
   }
 
   // Vitrages pris en compte : la liste détaillée, ou en saisie rapide un vitrage
@@ -184,7 +203,9 @@
           vitragesPiece(piece).forEach(function (v) { S += Math.max(num(v.surface), 0); });
           l.menuiserie = S > 0 ? Math.max(4 * Math.sqrt(S), T.perimetreRapide * S) : 0;
         } else {
-          (piece.vitrages || []).forEach(function (v) { l.menuiserie += 4 * Math.sqrt(Math.max(num(v.surface), 0)); });
+          (piece.vitrages || []).forEach(function (v) {
+            if (!fenetreDeToit(v)) l.menuiserie += 4 * Math.sqrt(Math.max(num(v.surface), 0));
+          });
         }
         d.menuiserie = T.menuiserie[iso] * l.menuiserie;
       }
@@ -193,8 +214,132 @@
     return { isolation: iso, longueurs: l, detail: d, total: total };
   }
 
+  /* ---------- Été : bilan de climatisation ---------- */
+
+  // Écart équivalent (K) des murs au soleil, selon l'inertie et l'isolation, recalé sur l'écart été.
+  function etdMur(climat, supplement) {
+    var mur = D.find(D.MURS, climat.murType);
+    if (!mur || !mur.inertie) return Math.max(D.CLIM.ecartReferenceEtd + supplement, 0);
+    var cle = mur.inertie;
+    if (cle === 'moyen') {
+      var iso = isolationMur(climat);
+      cle = 'moyen_' + (iso === 'iti' || iso === 'ite' ? iso : 'non_isole');
+    }
+    return Math.max(D.ETD_MURS[cle] + supplement, 0);
+  }
+
+  // Écart équivalent (K) de la toiture : combles chauds, rampants ou terrasse au soleil.
+  function etdToiture(climat, supplement) {
+    var toit = D.find(D.TOITURES, climat.toitureType);
+    if (!toit || toit.r === null || toit.r === undefined) return 0;
+    var etd = toit.etdNonIsole && !(rIsolant(climat.isolantToiture) > 0) ? toit.etdNonIsole : toit.etd;
+    return Math.max((etd || D.CLIM.ecartReferenceEtd) + supplement, 0);
+  }
+
+  // Types reconnus dans le nom de la pièce (« Séjour-cuisine » = séjour + cuisine).
+  function typesPiece(nom) {
+    return D.TYPES_PIECE.filter(function (t) { return new RegExp(t.motif, 'i').test(nom || ''); });
+  }
+
+  // Occupants et équipements par défaut, utilisés quand le champ est vide.
+  function defautsPiece(piece, surface, foyer) {
+    var types = typesPiece(piece.nom);
+    if (!types.length) return { occupants: D.CLIM.occupantsInconnu, equipements: D.CLIM.equipementsParM2 * surface };
+    var occupants = 0;
+    var equipements = 0;
+    types.forEach(function (t) {
+      occupants = Math.max(occupants, t.occupants === 'foyer' ? foyer : t.occupants);
+      equipements += t.equipements;
+    });
+    return { occupants: occupants, equipements: equipements };
+  }
+
+  // Personnes du foyer : encart Prime ; sinon nombre de chambres + 1 ; sinon valeur par défaut.
+  function foyerChantier(chantier) {
+    var n = chantier.prime ? Math.floor(num(chantier.prime.personnes)) : 0;
+    if (n >= 1) return { n: n, source: 'prime' };
+    var chambres = 0;
+    (chantier.pieces || []).forEach(function (p) {
+      if (typesPiece(p.nom).some(function (t) { return t.id === 'chambre'; })) chambres++;
+    });
+    return chambres ? { n: chambres + 1, source: 'chambres' } : { n: D.CLIM.foyerDefaut, source: 'defaut' };
+  }
+
+  // Puissance nominale (totale, conditions EN 14511) couvrant le total ET la part sensible,
+  // sans dépasser 1,3 × le besoin total (compresseur inverter).
+  function puissanceNominale(sensible, latent) {
+    var K = D.CLIM;
+    return Math.max(sensible + latent, Math.min(sensible / K.rapportSensible, K.surdimMax * (sensible + latent)));
+  }
+
+  // Bilan d'été de la pièce (pointe de la pièce), et termes simultanés pour le total chantier.
+  // r : déperditions déjà calculées (u, smur, surface, débit, ponts thermiques).
+  function climatisationPiece(piece, climat, foyer, r) {
+    var K = D.CLIM;
+    var ecart = Math.max(num(climat.tBaseEte) - num(climat.tConfortEte), 0);
+    var supplement = ecart - K.ecartReferenceEtd;
+    var mur = D.find(D.MURS, climat.murType) || {};
+    var toit = D.find(D.TOITURES, climat.toitureType);
+    var legere = !!mur.bois || (piece.sousToiture !== 'non' && !!(toit && toit.leger));
+
+    // Baies : soleil (pointe de la pièce / simultané maison) et conduction (volets ouverts le jour).
+    var solaires = 0;
+    var solairesSimultanes = 0;
+    var vitrages = 0;
+    vitragesPiece(piece).forEach(function (v) {
+      var s = Math.max(num(v.surface), 0);
+      var type = D.find(D.VITRAGES, v.type);
+      if (!type || !(s > 0)) return;
+      var verticale = !fenetreDeToit(v);
+      solaires += s * type.g * rayonnementPiece(v.orientation) * (legere && verticale ? K.solaireLeger : 1);
+      solairesSimultanes += s * type.g * rayonnement(v.orientation);
+      vitrages += Math.max(type.u, U_VITRAGE_MIN) * s * ecart;
+    });
+
+    var murs = r.u.mur * r.smur * etdMur(climat, supplement);
+    var toiture = r.surfaceToiture * r.u.toiture * etdToiture(climat, supplement);
+    // Le plancher bas (sur sol ou local non chauffé) n'apporte pas de chaleur l'été.
+    var ponts = (r.pontsThermiques.total - r.pontsThermiques.detail.plancherBas) * ecart;
+    var ventilation = COEF_AIR * r.debit * ecart;
+
+    var activite = D.find(D.ACTIVITES, piece.activite) || D.ACTIVITES[0];
+    var defauts = defautsPiece(piece, r.surface, foyer);
+    var occupantsAuto = estVide(piece.occupants);
+    var equipementsAuto = estVide(piece.equipements);
+    var occupants = occupantsAuto ? defauts.occupants : Math.max(num(piece.occupants), 0);
+    var equipements = equipementsAuto ? defauts.equipements : Math.max(num(piece.equipements), 0);
+
+    var apports = {
+      solaires: solaires,
+      vitrages: vitrages,
+      murs: murs,
+      toiture: toiture,
+      pontsThermiques: ponts,
+      ventilation: ventilation,
+      occupants: occupants * activite.w,
+      equipements: equipements,
+      latentOccupants: occupants * activite.lat,
+      latentAir: K.latentAir * r.debit * K.dwEte
+    };
+    var sensible = solaires + vitrages + murs + toiture + ponts + ventilation + apports.occupants + equipements;
+    var latent = apports.latentOccupants + apports.latentAir;
+    return {
+      apports: apports,
+      sensible: sensible,
+      latent: latent,
+      nominale: puissanceNominale(sensible, latent),
+      occupants: occupants,
+      occupantsAuto: occupantsAuto,
+      equipements: equipements,
+      equipementsAuto: equipementsAuto,
+      pieceLegere: legere,
+      solairesSimultanes: solairesSimultanes
+    };
+  }
+
   // regimeEau (facultatif) : régime d'eau des radiateurs, id de D.REGIMES_EAU.
-  function calculPiece(piece, climat, regimeEau) {
+  // foyer (facultatif) : personnes du foyer, pour les occupants par défaut des pièces de vie.
+  function calculPiece(piece, climat, regimeEau, foyer) {
     var u = uEnveloppe(climat);
     var s = num(piece.longueur) * num(piece.largeur);
     var volume = s * num(piece.hauteur);
@@ -204,23 +349,24 @@
     var uPlancher = surPlancherBas ? u.plancher : 0;
 
     var surfaceVitree = 0;
+    var surfaceFenetresToit = 0;
     var deperditionsVitrages = 0;
-    var apportsSolaires = 0;
     vitragesPiece(piece).forEach(function (v) {
       var surface = Math.max(num(v.surface), 0);
-      var type = D.find(D.VITRAGES, v.type);
       surfaceVitree += surface;
+      if (fenetreDeToit(v)) surfaceFenetresToit += surface;
       deperditionsVitrages += uVitrage(v) * surface;
-      if (type) apportsSolaires += surface * type.g * rayonnement(v.orientation);
     });
 
-    var smur = Math.max(num(piece.lineaire) * num(piece.hauteur) - surfaceVitree, 0);
+    // Les baies verticales sont prises sur les murs, les fenêtres de toit sur la toiture.
+    var smur = Math.max(num(piece.lineaire) * num(piece.hauteur) - (surfaceVitree - surfaceFenetresToit), 0);
+    var surfaceToiture = Math.max(s - surfaceFenetresToit, 0);
     var debit = debitRetenu(piece, climat);
     var pt = pontsThermiques(piece, climat);
 
     var deperditions = {
       murs: u.mur * smur,
-      toiture: uToiture * s,
+      toiture: uToiture * surfaceToiture,
       plancher: uPlancher * s,
       vitrages: deperditionsVitrages,
       pontsThermiques: pt.total,
@@ -234,16 +380,10 @@
     var surpuissance = Math.max(num(climat.surpuissance), 0);
     var chauffage = chauffageBase * (1 + surpuissance / 100);
 
-    var ecartEte = Math.max(num(climat.tBaseEte) - num(climat.tConfortEte), 0);
-    var activite = D.find(D.ACTIVITES, piece.activite);
-    var apports = {
-      solaires: apportsSolaires,
-      // Le plancher bas (sur sol ou local non chauffé) n'apporte pas de chaleur l'été.
-      transmission: (u.mur * smur + uToiture * s + pt.total - pt.detail.plancherBas) * ecartEte,
-      ventilation: COEF_AIR * debit * ecartEte,
-      internes: Math.max(num(piece.occupants), 0) * (activite ? activite.w : 0) + Math.max(num(piece.equipements), 0)
-    };
-    var climatisation = apports.solaires + apports.transmission + apports.ventilation + apports.internes;
+    var clim = climatisationPiece(piece, climat, foyer || D.CLIM.foyerDefaut, {
+      u: { mur: u.mur, toiture: uToiture }, smur: smur, surface: s, surfaceToiture: surfaceToiture,
+      debit: debit, pontsThermiques: pt
+    });
 
     // Radiateurs : puissances catalogue (ΔT50) ramenées au régime d'eau de l'installation.
     var facteur = facteurRegime(regimeEau, climat.tConfortHiver);
@@ -264,6 +404,7 @@
       surface: s,
       volume: volume,
       surfaceVitree: surfaceVitree,
+      surfaceFenetresToit: surfaceFenetresToit,
       smur: smur,
       u: { mur: u.mur, toiture: uToiture, plancher: uPlancher },
       debit: debit,
@@ -275,8 +416,11 @@
       chauffageBase: chauffageBase,
       surpuissance: surpuissance,
       chauffage: chauffage,
-      apports: apports,
-      climatisation: climatisation,
+      apports: clim.apports,
+      clim: clim,
+      // Puissance frigorifique nominale de la pièce (choix du split).
+      climatisation: clim.nominale,
+      palierSplit: palier(clim.nominale / 1000, D.PALIERS_SPLIT),
       facteurRegime: facteur,
       // Palier catalogue (ΔT50) dont la puissance au régime d'eau couvre le besoin.
       radiateurNeuf: facteur > 0 ? palier(chauffage / facteur, D.PALIERS_RADIATEUR) : { valeur: null, depasse: chauffage > 0 },
@@ -286,14 +430,43 @@
 
   function calculChantier(chantier) {
     var regimeEau = chantier.installation ? chantier.installation.regimeEau : undefined;
-    var pieces = (chantier.pieces || []).map(function (p) { return calculPiece(p, chantier.climat, regimeEau); });
+    var foyer = foyerChantier(chantier);
+    var pieces = (chantier.pieces || []).map(function (p) { return calculPiece(p, chantier.climat, regimeEau, foyer.n); });
     var chauffage = 0;
-    var climatisation = 0;
-    pieces.forEach(function (r) { chauffage += r.chauffage; climatisation += r.climatisation; });
+    var sommePieces = 0;
+    var sensible = 0;
+    var latent = 0;
+    var occupants = 0;
+    var occupantsMax = 0;
+    var occupantsSensible = 0;
+    var occupantsLatent = 0;
+    pieces.forEach(function (r) {
+      var c = r.clim;
+      chauffage += r.chauffage;
+      sommePieces += c.nominale;
+      // Total simultané : soleil « maison entière » ; occupants comptés à part (plafonnés au foyer).
+      sensible += c.sensible - c.apports.solaires + c.solairesSimultanes - c.apports.occupants;
+      latent += c.latent - c.apports.latentOccupants;
+      occupants += c.occupants;
+      occupantsMax = Math.max(occupantsMax, c.occupants);
+      occupantsSensible += c.apports.occupants;
+      occupantsLatent += c.apports.latentOccupants;
+    });
+    var plafond = Math.max(foyer.n, occupantsMax);
+    var part = occupants > plafond ? plafond / occupants : 1;
+    sensible += part * occupantsSensible;
+    latent += part * occupantsLatent;
+    var climatisation = puissanceNominale(sensible, latent);
     return {
       pieces: pieces,
       chauffage: chauffage,
+      // Puissance frigorifique nominale simultanée (groupe extérieur, PAC air/air, gainable).
       climatisation: climatisation,
+      climSensible: sensible,
+      climLatent: latent,
+      // Somme des puissances des pièces (unités intérieures) : non simultanée, indicative.
+      climSommePieces: sommePieces,
+      foyer: foyer,
       palierChauffage: palier(chauffage / 1000, D.PALIERS_PAC),
       palierClimatisation: palier(climatisation / 1000, D.PALIERS_PAC),
       anah: categorieAnah(chantier.prime)
@@ -335,6 +508,13 @@
     isolationMur: isolationMur,
     pontsThermiques: pontsThermiques,
     rayonnement: rayonnement,
+    rayonnementPiece: rayonnementPiece,
+    etdMur: etdMur,
+    etdToiture: etdToiture,
+    typesPiece: typesPiece,
+    defautsPiece: defautsPiece,
+    foyerChantier: foyerChantier,
+    puissanceNominale: puissanceNominale,
     vitragesPiece: vitragesPiece,
     calculPiece: calculPiece,
     calculChantier: calculChantier,

@@ -158,6 +158,7 @@
   var euros = F.euros;
   var palierBarre = F.palierBarre;
   var textePalierRadiateur = F.textePalierRadiateur;
+  var textePalierSplit = F.textePalierSplit;
   var dateFr = F.dateFr;
 
   /* ---------- Composants de formulaire ---------- */
@@ -345,7 +346,7 @@
   function renderVitrageRapide(p, i) {
     var base = 'pieces.' + i + '.vitrageRapide';
     var orientations = [{ value: D.ORIENTATION_MIXTE.id, label: D.ORIENTATION_MIXTE.label }]
-      .concat(D.ORIENTATIONS.map(function (o) { return { value: o.id, label: o.label }; }));
+      .concat(D.ORIENTATIONS.filter(function (o) { return !o.toit; }).map(function (o) { return { value: o.id, label: o.label }; }));
     return '<div class="grid">' +
       bascule('Niveau de vitrage', base + '.niveau', D.NIVEAUX_VITRAGE.map(function (n) { return [n.id, n.label.replace(' vitré', '')]; }), { obligatoire: true, cls: 'span-2' }) +
       '</div>' +
@@ -413,6 +414,7 @@
         '<div class="grid">' +
         champ('Occupants', 'pieces.' + i + '.occupants', { kind: 'int' }) +
         champ('Équipements', 'pieces.' + i + '.equipements', { kind: 'num', unite: 'W' }) +
+        '<p class="hint span-2">Vides : valeurs automatiques selon le nom de la pièce (affichées en grisé). Saisir 0 pour n\'en compter aucun.</p>' +
         liste('Activité des occupants', 'pieces.' + i + '.activite', D.ACTIVITES.map(function (a) { return { value: a.id, label: a.label + ' (' + a.w + ' W / pers.)' }; }), { cls: 'span-2' }) +
         champ('Débit de ventilation', 'pieces.' + i + '.debit', {
           kind: 'num', unite: 'm³/h',
@@ -480,8 +482,9 @@
     var a = r.apports;
     return '<div class="kpis">' +
       '<div class="kpi heat"><span>Chauffage</span><strong>' + kW(r.chauffage) + '</strong><small>' + W(r.chauffage) + '</small></div>' +
-      '<div class="kpi cool"><span>Climatisation</span><strong>' + kW(r.climatisation) + '</strong><small>' + W(r.climatisation) + '</small></div>' +
+      '<div class="kpi cool"><span>Climatisation</span><strong>' + kW(r.climatisation) + '</strong><small>' + W(r.climatisation) + ' nominal</small></div>' +
       '</div>' +
+      '<div class="reco"><span>Split préconisé (unité intérieure)</span><strong>' + textePalierSplit(r.palierSplit) + '</strong></div>' +
       '<div class="reco"><span>Radiateur neuf préconisé</span><strong>' + textePalierRadiateur(r.radiateurNeuf) + '</strong>' +
       (r.facteurRegime !== 1 ? '<small class="reco-note">puissance catalogue ΔT50, pour un régime ' + F.esc(state.installation.regimeEau) + ' °C</small>' : '') +
       '</div>' +
@@ -503,12 +506,21 @@
       '<tr class="total"><th>G</th><td>' + nf(r.G, 2) + ' W/K</td></tr>' +
       '<tr><th>Puissance de base (G × ΔT)</th><td>' + W(r.chauffageBase) + '</td></tr>' +
       '<tr><th>Surpuissance de relance</th><td>+ ' + nf(r.surpuissance) + ' % = ' + W(r.chauffage) + '</td></tr>' +
-      '<tr class="sep"><th colspan="2">Apports été (W)</th></tr>' +
-      '<tr><th>Solaires</th><td>' + nf(a.solaires) + '</td></tr>' +
-      '<tr><th>Transmission</th><td>' + nf(a.transmission) + '</td></tr>' +
-      '<tr><th>Ventilation</th><td>' + nf(a.ventilation) + '</td></tr>' +
-      '<tr><th>Internes</th><td>' + nf(a.internes) + '</td></tr>' +
-      '</tbody></table></details>';
+      '<tr class="sep"><th colspan="2">Apports été, pointe de la pièce (W)</th></tr>' +
+      '<tr><th>Soleil par les baies' + (r.clim.pieceLegere ? ' (pièce légère)' : '') + '</th><td>' + nf(a.solaires) + '</td></tr>' +
+      '<tr><th>Conduction des baies</th><td>' + nf(a.vitrages) + '</td></tr>' +
+      '<tr><th>Murs au soleil</th><td>' + nf(a.murs) + '</td></tr>' +
+      '<tr><th>Toiture / combles</th><td>' + nf(a.toiture) + '</td></tr>' +
+      '<tr><th>Ponts thermiques</th><td>' + nf(a.pontsThermiques) + '</td></tr>' +
+      '<tr><th>Air (ventilation)</th><td>' + nf(a.ventilation) + '</td></tr>' +
+      '<tr><th>Occupants (' + nf(r.clim.occupants) + (r.clim.occupantsAuto ? ', auto' : '') + ')</th><td>' + nf(a.occupants) + '</td></tr>' +
+      '<tr><th>Éclairage et appareils' + (r.clim.equipementsAuto ? ' (auto)' : '') + '</th><td>' + nf(a.equipements) + '</td></tr>' +
+      '<tr class="total"><th>Sensible</th><td>' + W(r.clim.sensible) + '</td></tr>' +
+      '<tr><th>Latent (humidité occupants + air)</th><td>' + W(r.clim.latent) + '</td></tr>' +
+      '<tr class="total"><th>Puissance nominale</th><td>' + W(r.climatisation) + '</td></tr>' +
+      '</tbody></table>' +
+      '<p class="hint">Puissance frigorifique nominale d\'un climatiseur air/air (split, gainable), latent compris. ' +
+      'Pour un plancher rafraîchissant, retenir la part sensible.</p></details>';
   }
 
   function blocRadiateurExistant(r) {
@@ -553,6 +565,10 @@
         : '');
       var input = document.querySelector('[data-bind="pieces.' + i + '.debit"]');
       if (input) input.placeholder = 'auto : ' + nf(r.debitEstime, 1);
+      var champOcc = document.querySelector('[data-bind="pieces.' + i + '.occupants"]');
+      if (champOcc) champOcc.placeholder = 'auto : ' + nf(r.clim.occupants);
+      var champEquip = document.querySelector('[data-bind="pieces.' + i + '.equipements"]');
+      if (champEquip) champEquip.placeholder = 'auto : ' + nf(Math.round(r.clim.equipements));
       setHTML('debit-aide-' + p.uid, r.debitAuto ? 'Vide : estimation volume × taux utilisée (' + nf(r.debitEstime, 1) + ' m³/h).' : '');
       // Alerte : sans linéaire, aucun mur extérieur n'est compté (cause fréquente de sous-évaluation).
       var aideLineaire = document.getElementById('lineaire-aide-' + p.uid);

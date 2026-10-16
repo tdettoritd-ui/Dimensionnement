@@ -24,20 +24,28 @@
   // Résistance de base des murs (m².K/W, avant isolant rapporté), résistances superficielles
   // comprises (R = 1 / U0 des tables 3CL-DPE 2021). Révision octobre 2026 : voir README.
   var MURS = [
-    { id: 'pierre', label: 'Pierre / brique pleine (ancien)', r: 0.40 },
-    { id: 'parpaing', label: 'Parpaing / béton banché', r: 0.40 },
-    { id: 'machefer', label: 'Mâchefer (parpaing / agglo)', r: 0.42 },
-    { id: 'brique_creuse', label: 'Brique creuse (20-25 cm)', r: 0.55 },
-    { id: 'monomur', label: 'Brique monomur / alvéolaire (30-37,5 cm)', r: 2.1, itr: true },
-    { id: 'beton_cellulaire', label: 'Béton cellulaire', r: 1.43, itr: true },
-    { id: 'ossature_bois', label: 'Ossature bois', r: 0.30, itr: true, bois: true }
+    { id: 'pierre', label: 'Pierre / brique pleine (ancien)', r: 0.40, inertie: 'lourd' },
+    { id: 'parpaing', label: 'Parpaing / béton banché', r: 0.40, inertie: 'moyen' },
+    { id: 'machefer', label: 'Mâchefer (parpaing / agglo)', r: 0.42, inertie: 'moyen' },
+    { id: 'brique_creuse', label: 'Brique creuse (20-25 cm)', r: 0.55, inertie: 'moyen' },
+    { id: 'monomur', label: 'Brique monomur / alvéolaire (30-37,5 cm)', r: 2.1, itr: true, inertie: 'lourd' },
+    { id: 'beton_cellulaire', label: 'Béton cellulaire', r: 1.43, itr: true, inertie: 'lourd' },
+    { id: 'ossature_bois', label: 'Ossature bois', r: 0.30, itr: true, bois: true, inertie: 'leger' }
   ];
 
-  // Résistance de base toiture (m².K/W) — r null : U = 0
+  // Été : écart de température équivalent des murs au soleil (ETD, K), tabulé pour 32 / 26 °C,
+  // enduit de teinte moyenne, à l'heure de pointe de la maison (17-18 h), moyenne des façades
+  // (conduction transitoire 1D, température sol-air du 21 juillet à Sarreguemines, ciel clair).
+  var ETD_MURS = { lourd: 6, moyen_non_isole: 12, moyen_iti: 9, moyen_ite: 7, leger: 12 };
+
+  // Résistance de base toiture (m².K/W) — r null : U = 0.
+  // etd : écart équivalent d'été (K, pour 32 / 26 °C) : combles chauds (≈ 42 °C), rampants et terrasse
+  // au soleil (Manual J 8, bilan des combles ventilés, conduction transitoire) ; leger : pièce légère.
   var TOITURES = [
-    { id: 'combles', label: 'Combles / rampants (structure bois)', r: 0.40 },
-    { id: 'combles_dalle', label: 'Combles perdus sur dalle béton / hourdis', r: 0.40, lourd: true },
-    { id: 'terrasse', label: 'Toiture terrasse (structure béton)', r: 0.35, lourd: true },
+    { id: 'combles', label: 'Combles perdus (plafond, structure bois)', r: 0.40, etd: 16 },
+    { id: 'rampants', label: 'Combles aménagés / rampants (structure bois)', r: 0.40, etd: 25, leger: true },
+    { id: 'combles_dalle', label: 'Combles perdus sur dalle béton / hourdis', r: 0.40, lourd: true, etd: 12 },
+    { id: 'terrasse', label: 'Toiture terrasse (structure béton)', r: 0.35, lourd: true, etd: 8, etdNonIsole: 13 },
     { id: 'aucune', label: 'Aucune (étage intermédiaire)', r: null }
   ];
 
@@ -102,21 +110,26 @@
     { id: 'triple', label: 'Triple vitrage', u: 1.0, g: 0.40 }
   ];
 
-  // Rayonnement solaire de pointe d'été (W/m² de baie, à multiplier par g = Sw) : éclairement de
-  // pointe en façade × facteur de charge solaire (méthode résidentielle ASHRAE, 45-49° N).
-  // L'Ouest est la façade la plus pénalisante (pointe en fin d'après-midi, à l'heure chaude).
+  // Rayonnement solaire de pointe d'été (W/m² de baie, à multiplier par g = Sw), baies sans protection.
+  // w      : pointe SIMULTANÉE de la maison (éclairement de pointe × facteur de charge ASHRAE
+  //          « maison entière ») : total chantier (groupe extérieur, PAC air/air, gainable).
+  // wPiece : pointe PROPRE À LA PIÈCE (choix du split) : moyenne de Manual J 8 (pointe horaire,
+  //          49° N) et d'un calcul ciel clair pvlib × stockage ISO 13790 (inertie moyenne).
+  // toit   : fenêtre de toit (pente 30-45°), hors moyenne « mixte ».
   var ORIENTATIONS = [
-    { id: 'S', label: 'Sud', w: 250 },
-    { id: 'SE', label: 'Sud-Est', w: 240 },
-    { id: 'SO', label: 'Sud-Ouest', w: 370 },
-    { id: 'E', label: 'Est', w: 220 },
-    { id: 'O', label: 'Ouest', w: 390 },
-    { id: 'NE', label: 'Nord-Est', w: 110 },
-    { id: 'NO', label: 'Nord-Ouest', w: 240 },
-    { id: 'N', label: 'Nord', w: 70 }
+    { id: 'S', label: 'Sud', w: 250, wPiece: 380 },
+    { id: 'SE', label: 'Sud-Est', w: 240, wPiece: 440 },
+    { id: 'SO', label: 'Sud-Ouest', w: 370, wPiece: 460 },
+    { id: 'E', label: 'Est', w: 220, wPiece: 430 },
+    { id: 'O', label: 'Ouest', w: 390, wPiece: 480 },
+    { id: 'NE', label: 'Nord-Est', w: 110, wPiece: 250 },
+    { id: 'NO', label: 'Nord-Ouest', w: 240, wPiece: 290 },
+    { id: 'N', label: 'Nord', w: 70, wPiece: 100 },
+    { id: 'toit', label: 'Fenêtre de toit – pan Sud, Est ou Ouest', w: 500, wPiece: 700, toit: true },
+    { id: 'toit_n', label: 'Fenêtre de toit – pan Nord', w: 200, wPiece: 300, toit: true }
   ];
 
-  // Orientation « moyenne » proposée en saisie rapide : rayonnement = moyenne des 8 orientations.
+  // Orientation « moyenne » proposée en saisie rapide : moyenne des 8 orientations verticales.
   var ORIENTATION_MIXTE = { id: 'mixte', label: 'Plusieurs orientations (moyenne)' };
 
   // Saisie rapide des vitrages : surface vitrée = ratio × surface au sol de la pièce.
@@ -126,13 +139,40 @@
     { id: 'tres', label: 'Très vitré', ratio: 0.25 }
   ];
 
-  // Apports internes par occupant (W)
+  // Apports internes par occupant (W) : w sensible, lat latent (ASHRAE).
   var ACTIVITES = [
-    { id: 'sedentaire', label: 'Sédentaire', w: 70 },
-    { id: 'bureau', label: 'Bureau / classe', w: 80 },
-    { id: 'legere', label: 'Activité légère', w: 100 },
-    { id: 'cuisine', label: 'Restauration / cuisine', w: 130 }
+    { id: 'sedentaire', label: 'Sédentaire', w: 70, lat: 45 },
+    { id: 'bureau', label: 'Bureau / classe', w: 80, lat: 55 },
+    { id: 'legere', label: 'Activité légère', w: 100, lat: 55 },
+    { id: 'cuisine', label: 'Restauration / cuisine', w: 130, lat: 80 }
   ];
+
+  // Été : occupants et équipements (éclairage + appareils, W) par défaut selon le nom de la pièce,
+  // quand le champ est vide (total ≈ 700 W par logement, défaut Manual J de 2 400 Btu/h).
+  // occupants 'foyer' = personnes du foyer (encart Prime ; sinon chambres + 1).
+  var TYPES_PIECE = [
+    { id: 'sejour', motif: 's[ée]jour|salon|salle . manger|living|pi[èe]ce de vie|v[ée]randa', occupants: 'foyer', equipements: 150 },
+    { id: 'cuisine', motif: 'cuisine', occupants: 1, equipements: 300 },
+    { id: 'chambre', motif: 'chambre', occupants: 2, equipements: 50 },
+    { id: 'bureau', motif: 'bureau', occupants: 1, equipements: 150 },
+    { id: 'service', motif: 'bain|salle d.eau|wc|toilette|couloir|entr[ée]e|d[ée]gagement|buanderie|cellier|dressing|palier|escalier|garage', occupants: 0, equipements: 0 }
+  ];
+
+  // Constantes du calcul d'été.
+  var CLIM = {
+    ecartReferenceEtd: 6,  // K : écart 32 - 26 °C pour lequel les ETD sont tabulés (recalés sinon)
+    solaireLeger: 1.15,    // pièce légère (sous rampants, ossature bois) : baies verticales
+    latentAir: 0.83,       // W par (m³/h · g/kg) : 1,2 kg/m³ × 2 501 kJ/kg / 3 600
+    dwEte: 2,              // g/kg : écart d'humidité absolue air extérieur / intérieur
+    rapportSensible: 0.75, // part sensible de la puissance nominale air/air (27/19 °C, EN 14511)
+    surdimMax: 1.3,        // plafond de surdimensionnement d'un compresseur inverter (Manual S)
+    equipementsParM2: 7,   // W/m² : pièce non reconnue
+    occupantsInconnu: 1,   // pièce non reconnue
+    foyerDefaut: 4         // personnes si ni l'encart Prime ni les chambres ne le donnent
+  };
+
+  // Puissances nominales courantes des unités intérieures murales (kW) : choix du split par pièce.
+  var PALIERS_SPLIT = [1.5, 2, 2.5, 3.5, 4.2, 5, 6, 7.1];
 
   // Taux de renouvellement d'air (vol/h)
   var VENTILATIONS = [
@@ -238,6 +278,10 @@
     ACTIVITES: ACTIVITES,
     VENTILATIONS: VENTILATIONS,
     PALIERS_PAC: PALIERS_PAC,
+    PALIERS_SPLIT: PALIERS_SPLIT,
+    ETD_MURS: ETD_MURS,
+    TYPES_PIECE: TYPES_PIECE,
+    CLIM: CLIM,
     PALIERS_RADIATEUR: PALIERS_RADIATEUR,
     RADIATEURS_ACIER: RADIATEURS_ACIER,
     RADIATEURS_ELEMENTS: RADIATEURS_ELEMENTS,

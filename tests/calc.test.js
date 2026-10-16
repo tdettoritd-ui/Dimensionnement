@@ -82,9 +82,24 @@ test('calcul pièce complet', () => {
   const G = uMur * smur + uToit * 20 + uPlancher * 20 + (vit('double').u - 0.2) * 2 + pt + 0.34 * debit;
   proche(r.G, G);
   proche(r.chauffage, G * 35);
+  // Été (pointe de la pièce) : soleil, conduction des baies, murs et toiture au soleil (ETD),
+  // ponts thermiques hors plancher bas, air, occupants, équipements ; latent ; puissance nominale.
   const ptEte = pt - PT.plancherBas.iti[0] * 9;
-  const clim = 2 * vit('double').g * soleil('S') + (uMur * smur + uToit * 20 + ptEte) * 6 + 0.34 * debit * 6 + 2 * 70 + 150;
-  proche(r.climatisation, clim);
+  const a = r.apports;
+  proche(a.solaires, 2 * vit('double').g * D.find(D.ORIENTATIONS, 'S').wPiece);
+  proche(a.vitrages, vit('double').u * 2 * 6);
+  proche(a.murs, uMur * smur * D.ETD_MURS.moyen_iti);
+  proche(a.toiture, uToit * 20 * D.find(D.TOITURES, 'combles').etd);
+  proche(a.pontsThermiques, ptEte * 6);
+  proche(a.ventilation, 0.34 * debit * 6);
+  proche(a.occupants, 2 * 70);
+  proche(a.equipements, 150);
+  proche(a.latentOccupants, 2 * 45);
+  proche(a.latentAir, 0.83 * debit * 2);
+  const sensible = a.solaires + a.vitrages + a.murs + a.toiture + a.pontsThermiques + a.ventilation + a.occupants + a.equipements;
+  const latent = a.latentOccupants + a.latentAir;
+  proche(r.clim.sensible, sensible);
+  proche(r.climatisation, Math.max(sensible + latent, Math.min(sensible / 0.75, 1.3 * (sensible + latent))));
 });
 
 test('pièce hors toiture : U toiture = 0 ; débit saisi prioritaire', () => {
@@ -149,15 +164,16 @@ test('saisie rapide des vitrages : surface = ratio × surface au sol', () => {
   const r = C.calculPiece(rapide, climat);
   proche(r.surfaceVitree, 20 * ratio);
   proche(r.deperditions.vitrages, 20 * ratio * (vit('double').u - 0.2));
-  proche(r.apports.solaires, 20 * ratio * vit('double').g * soleil('S'));
+  proche(r.apports.solaires, 20 * ratio * vit('double').g * D.find(D.ORIENTATIONS, 'S').wPiece);
   proche(r.smur, 18 * 2.5 - 20 * ratio);
   // la liste détaillée est ignorée en mode rapide, et réutilisée en mode détaillé
   proche(C.calculPiece(base, climat).surfaceVitree, 9);
 });
 
 test('orientation mixte = moyenne des orientations', () => {
-  const moyenne = D.ORIENTATIONS.reduce((s, o) => s + o.w, 0) / D.ORIENTATIONS.length;
-  proche(C.rayonnement('mixte'), moyenne);
+  const verticales = D.ORIENTATIONS.filter(o => !o.toit);
+  proche(C.rayonnement('mixte'), verticales.reduce((s, o) => s + o.w, 0) / verticales.length);
+  proche(C.rayonnementPiece('mixte'), verticales.reduce((s, o) => s + o.wPiece, 0) / verticales.length);
   assert.equal(C.rayonnement('inconnue'), 0);
 });
 
@@ -169,10 +185,14 @@ test('cohérence des tables de référence', () => {
   });
   D.MURS.forEach(m => assert.ok(m.r > 0, m.id));
   D.VITRAGES.forEach(v => assert.ok(v.u > 0 && v.g > 0 && v.g < 1, v.id));
-  D.ORIENTATIONS.forEach(o => assert.ok(o.w > 0, o.id));
-  // L'Ouest est la façade la plus chargée en été, le Nord la moins chargée.
-  assert.equal(Math.max(...D.ORIENTATIONS.map(o => o.w)), soleil('O'));
-  assert.equal(Math.min(...D.ORIENTATIONS.map(o => o.w)), soleil('N'));
+  D.ORIENTATIONS.forEach(o => assert.ok(o.w > 0 && o.wPiece >= o.w, o.id));
+  // Façades : l'Ouest est la plus chargée en pointe simultanée, le Nord la moins chargée.
+  const verticales = D.ORIENTATIONS.filter(o => !o.toit);
+  assert.equal(Math.max(...verticales.map(o => o.w)), soleil('O'));
+  assert.equal(Math.min(...verticales.map(o => o.w)), soleil('N'));
+  assert.equal(Math.min(...verticales.map(o => o.wPiece)), D.find(D.ORIENTATIONS, 'N').wPiece);
+  D.ACTIVITES.forEach(a => assert.ok(a.lat > 0, a.id));
+  D.MURS.forEach(m => assert.ok(m.inertie, m.id));
   // Paliers strictement croissants.
   [D.PALIERS_PAC, D.PALIERS_RADIATEUR].forEach(p => p.forEach((v, i) => i && assert.ok(v > p[i - 1])));
   // Seuils Anah croissants pour chaque taille de foyer.
@@ -245,4 +265,62 @@ test('ponts thermiques 3CL selon la position de l\'isolant des murs', () => {
   // Combles sur dalle béton : pont thermique plancher haut ; combles bois : aucun.
   proche(C.pontsThermiques(sejour, { ...c, toitureType: 'combles_dalle' }).detail.plancherHaut, 0.75 * 10);
   assert.equal(C.pontsThermiques(sejour, c).detail.plancherHaut, 0);
+});
+
+test('climatisation : valeurs de référence contre-vérifiées (pièces types)', () => {
+  const iso = (m, e) => ({ materiau: m, epaisseur: String(e) });
+  const A = { ...climat, isolantMur: iso('laine_verre', 10), isolantToiture: iso('laine_verre', 20), positionIsolantMur: 'interieur' };
+  const P = o => ({ nom: 'Chambre', longueur: '4', largeur: '3', hauteur: '2,5', lineaire: '4', sousToiture: 'non', surPlancherBas: 'oui',
+    vitrageMode: 'detail', vitrages: [], occupants: '2', activite: 'sedentaire', equipements: '', debit: '', ...o });
+  const V = (o, s, t = 'double') => ({ orientation: o, type: t, surface: String(s), volet: 'non' });
+  const cas = [
+    [P({ vitrages: [V('S', 1.5)] }), A, 781],
+    [P({ vitrages: [V('O', 1.5)] }), A, 885],
+    [P({ nom: 'Séjour', longueur: '6', largeur: '5', lineaire: '11', vitrages: [V('O', 6), V('S', 2)] }), A, 3328],
+    [P({ sousToiture: 'oui', surPlancherBas: 'non', vitrages: [V('O', 1.5)] }), { ...A, toitureType: 'rampants' }, 1026],
+    [P({ sousToiture: 'oui', surPlancherBas: 'non', lineaire: '0', vitrages: [V('toit', 1, 'double_argon')] }), { ...A, toitureType: 'rampants' }, 793]
+  ];
+  cas.forEach(([p, c, attendu]) => assert.equal(Math.round(C.calculPiece(p, c, undefined, 4).climatisation), attendu, p.nom));
+});
+
+test('climatisation : défauts selon le nom de la pièce et foyer', () => {
+  assert.deepEqual(C.defautsPiece({ nom: 'Chambre parentale' }, 14, 4), { occupants: 2, equipements: 50 });
+  assert.deepEqual(C.defautsPiece({ nom: 'Séjour-cuisine' }, 40, 3), { occupants: 3, equipements: 450 });
+  assert.deepEqual(C.defautsPiece({ nom: 'Salle de bain' }, 6, 4), { occupants: 0, equipements: 0 });
+  assert.deepEqual(C.defautsPiece({ nom: 'Atelier' }, 10, 4), { occupants: 1, equipements: 70 });
+  assert.deepEqual(C.foyerChantier({ prime: { personnes: '5' }, pieces: [] }), { n: 5, source: 'prime' });
+  assert.deepEqual(C.foyerChantier({ prime: {}, pieces: [{ nom: 'Chambre 1' }, { nom: 'Chambre 2' }, { nom: 'Séjour' }] }), { n: 3, source: 'chambres' });
+  // Saisie prioritaire, même à 0.
+  const p = { nom: 'Chambre', longueur: '4', largeur: '3', hauteur: '2,5', lineaire: '0', vitrages: [], occupants: '0', equipements: '0', debit: '0' };
+  const r = C.calculPiece(p, climat, undefined, 4);
+  assert.equal(r.apports.occupants, 0);
+  assert.equal(r.apports.equipements, 0);
+});
+
+test('climatisation : fenêtre de toit retirée de la toiture, pas des murs', () => {
+  const p = { nom: 'Chambre', longueur: '4', largeur: '3', hauteur: '2,5', lineaire: '4', sousToiture: 'oui', debit: '0',
+    vitrages: [{ orientation: 'toit', type: 'double_argon', surface: '1', volet: 'non' }] };
+  const r = C.calculPiece(p, climat);
+  proche(r.smur, 4 * 2.5);
+  proche(r.deperditions.toiture, uToit * 11);
+  assert.equal(r.pontsThermiques.longueurs.menuiserie, 0);
+});
+
+test('climatisation : total simultané (soleil maison entière, occupants plafonnés au foyer)', () => {
+  const P = (nom, vit, occ) => ({ nom, longueur: '4', largeur: '4', hauteur: '2,5', lineaire: '4', sousToiture: 'non', vitrages: vit, occupants: occ, equipements: '', debit: '' });
+  const pieces = [P('Chambre 1', [{ orientation: 'E', type: 'double', surface: '2', volet: 'non' }], '2'),
+    P('Chambre 2', [{ orientation: 'O', type: 'double', surface: '2', volet: 'non' }], '2'),
+    P('Séjour', [{ orientation: 'S', type: 'double', surface: '4', volet: 'non' }], '4')];
+  const r = C.calculChantier({ climat, prime: { personnes: '4' }, pieces });
+  // Soleil simultané < pointes des pièces ; occupants ramenés à 4 personnes sur 8.
+  assert.ok(r.climatisation < r.climSommePieces);
+  let sensible = 0;
+  let latent = 0;
+  r.pieces.forEach(x => {
+    sensible += x.clim.sensible - x.apports.solaires + x.clim.solairesSimultanes - x.apports.occupants + 0.5 * x.apports.occupants;
+    latent += x.clim.latent - 0.5 * x.apports.latentOccupants;
+  });
+  proche(r.climSensible, sensible);
+  proche(r.climLatent, latent);
+  proche(r.climatisation, C.puissanceNominale(sensible, latent));
 });

@@ -258,7 +258,7 @@
       var ex = r.radiateurExistant;
       return [
         t(p.nom), t(F.nf(r.surface, 1) + ' m²'), t(F.W(r.chauffage)), t(F.W(r.climatisation)),
-        t(F.textePalierRadiateur(r.radiateurNeuf)),
+        t(F.textePalierSplit(r.palierSplit)), t(F.textePalierRadiateur(r.radiateurNeuf)),
         t(ex ? F.W(ex.puissance) + (ex.suffisant ? ' – suffisant' : ' – insuffisant') : '—')
       ];
     });
@@ -266,16 +266,22 @@
       startY: y + 6,
       margin: { left: MARGE, right: MARGE, top: MARGE, bottom: BAS },
       theme: 'grid',
-      head: [['Pièce', 'Surface', 'Chauffage', 'Climatisation', 'Radiateur neuf', 'Radiateur existant'].map(t)],
+      head: [['Pièce', 'Surface', 'Chauffage', 'Climatisation', 'Split', 'Radiateur neuf', 'Radiateur existant'].map(t)],
       body: lignesPieces,
       showFoot: 'lastPage',
-      foot: [[t('Total'), t(F.nf(surfaceTotale, 1) + ' m²'), t(F.kW(res.chauffage)), t(F.kW(res.climatisation)), '', '']],
+      foot: [[t('Total'), t(F.nf(surfaceTotale, 1) + ' m²'), t(F.kW(res.chauffage)), t(F.kW(res.climatisation) + ' *'), '', '', '']],
       styles: { font: 'helvetica', fontSize: 8.5, textColor: TEXTE, lineColor: FILET, lineWidth: 0.2, cellPadding: 1.5 },
       headStyles: { fillColor: BLEU, textColor: 255, fontStyle: 'bold' },
       footStyles: { fillColor: [238, 243, 247], textColor: TEXTE, fontStyle: 'bold' },
       columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } }
     });
-    y = doc.lastAutoTable.finalY + 7;
+    y = doc.lastAutoTable.finalY + 4;
+    police(doc, 7.5, false, GRIS);
+    var noteClim = doc.splitTextToSize(t('* Climatisation : besoin simultané de la maison (soleil et occupants non simultanés dans toutes les pièces), ' +
+      'pour le groupe extérieur. Somme des pièces : ' + F.kW(res.climSommePieces) + ' (unités intérieures). ' +
+      'Puissances frigorifiques nominales air/air, humidité (latent) comprise.'), UTILE);
+    doc.text(noteClim, MARGE, y + 2);
+    y += noteClim.length * 3.4 + 5;
 
     /* --- Détail des pièces --- */
     var LARGEUR_LIBELLE = 48;
@@ -304,6 +310,9 @@
         ['Vitrages', vitrages.length ? vitrages.join('\n') : '—'],
         ['Occupants / équipements', (p.occupants || '0') + ' (' + F.libelle(D.ACTIVITES, p.activite) + ') · ' + (p.equipements || '0') + ' W'],
         ['Ventilation', F.nf(r.debit, 1) + ' m³/h' + (r.debitAuto ? ' (estimé)' : '')],
+        ['Climatisation', F.W(r.clim.sensible) + ' sensible + ' + F.W(r.clim.latent) + ' latent -> ' + F.W(r.climatisation) +
+          ' nominal · split ' + F.textePalierSplit(r.palierSplit) +
+          ' (' + F.nf(r.clim.occupants) + ' occupant' + (r.clim.occupants > 1 ? 's' : '') + ', équipements ' + F.W(r.clim.equipements) + ')'],
         ['Déperditions G', F.nf(r.G, 2) + ' W/K (dont ponts thermiques ' + F.nf(r.deperditions.pontsThermiques, 2) + ') · base ' +
           F.W(r.chauffageBase) + ' + relance ' + F.nf(r.surpuissance) + ' %'],
         ['Radiateur neuf préconisé', F.textePalierRadiateur(r.radiateurNeuf) +
