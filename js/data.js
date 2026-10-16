@@ -116,17 +116,21 @@
   // wPiece : pointe PROPRE À LA PIÈCE (choix du split) : moyenne de Manual J 8 (pointe horaire,
   //          49° N) et d'un calcul ciel clair pvlib × stockage ISO 13790 (inertie moyenne).
   // toit   : fenêtre de toit (pente 30-45°), hors moyenne « mixte ».
+  // cren   : charge solaire SIMULTANÉE de la maison (W/m² de baie × g) à 10, 12, 15, 17 et 19 h (heure d'été),
+  //          calcul horaire ciel clair (21/07 et 21/08, Sarreguemines), inertie moyenne : total chantier.
+  //          Le maximum sur les créneaux remplace la table w unique (façades mixtes) : une maison vitrée
+  //          surtout au Sud ou à l'Ouest n'a pas de foisonnement solaire (cf. excursion AED de Manual J).
   var ORIENTATIONS = [
-    { id: 'S', label: 'Sud', w: 250, wPiece: 380 },
-    { id: 'SE', label: 'Sud-Est', w: 240, wPiece: 440 },
-    { id: 'SO', label: 'Sud-Ouest', w: 370, wPiece: 460 },
-    { id: 'E', label: 'Est', w: 220, wPiece: 430 },
-    { id: 'O', label: 'Ouest', w: 390, wPiece: 480 },
-    { id: 'NE', label: 'Nord-Est', w: 110, wPiece: 250 },
-    { id: 'NO', label: 'Nord-Ouest', w: 240, wPiece: 290 },
-    { id: 'N', label: 'Nord', w: 70, wPiece: 100 },
-    { id: 'toit', label: 'Fenêtre de toit – pan Sud, Est ou Ouest', w: 500, wPiece: 700, toit: true },
-    { id: 'toit_n', label: 'Fenêtre de toit – pan Nord', w: 200, wPiece: 300, toit: true }
+    { id: 'S', label: 'Sud', w: 250, wPiece: 380, cren: [130, 290, 395, 300, 160] },
+    { id: 'SE', label: 'Sud-Est', w: 240, wPiece: 440, cren: [380, 460, 260, 165, 125] },
+    { id: 'SO', label: 'Sud-Ouest', w: 370, wPiece: 460, cren: [95, 115, 355, 470, 390] },
+    { id: 'E', label: 'Est', w: 220, wPiece: 430, cren: [455, 370, 175, 150, 125] },
+    { id: 'O', label: 'Ouest', w: 390, wPiece: 480, cren: [100, 115, 175, 380, 475] },
+    { id: 'NE', label: 'Nord-Est', w: 110, wPiece: 270, cren: [285, 165, 125, 115, 95] },
+    { id: 'NO', label: 'Nord-Ouest', w: 240, wPiece: 300, cren: [80, 95, 105, 165, 315] },
+    { id: 'N', label: 'Nord', w: 70, wPiece: 100, cren: [70, 80, 90, 85, 75] },
+    { id: 'toit', label: 'Fenêtre de toit – pan Sud, Est ou Ouest', w: 500, wPiece: 700, toit: true, cren: [285, 515, 660, 560, 330] },
+    { id: 'toit_n', label: 'Fenêtre de toit – pan Nord', w: 200, wPiece: 300, toit: true, cren: [185, 220, 240, 235, 210] }
   ];
 
   // Orientation « moyenne » proposée en saisie rapide : moyenne des 8 orientations verticales.
@@ -165,10 +169,13 @@
     latentAir: 0.83,       // W par (m³/h · g/kg) : 1,2 kg/m³ × 2 501 kJ/kg / 3 600
     dwEte: 2,              // g/kg : écart d'humidité absolue air extérieur / intérieur
     rapportSensible: 0.75, // part sensible de la puissance nominale air/air (27/19 °C, EN 14511)
-    surdimMax: 1.3,        // plafond de surdimensionnement d'un compresseur inverter (Manual S)
+    surdimMax: 1.3,        // plafond de surdimensionnement (inverter) : garde-fou, valeur non sourcée précisément
     equipementsParM2: 7,   // W/m² : pièce non reconnue
     occupantsInconnu: 1,   // pièce non reconnue
-    foyerDefaut: 4         // personnes si ni l'encart Prime ni les chambres ne le donnent
+    foyerDefaut: 4,        // personnes si ni l'encart Prime ni les chambres ne le donnent
+    heuresCreneaux: ['10 h', '12 h', '15 h', '17 h', '19 h'],
+    partEcartCreneaux: [0, 0.15, 0.85, 1, 0.8], // part de l'écart été (T ext - T int) au créneau : baies, murs, toit, air
+    majorationDefaut: 0    // % ajouté à la puissance nominale (pièces et total) si « Majoration clim » est vide
   };
 
   // Puissances nominales courantes des unités intérieures murales (kW) : choix du split par pièce.

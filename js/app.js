@@ -55,6 +55,7 @@
       tConfortEte: '26',
       tConfortHiver: '20',
       surpuissance: '10',
+      majorationClim: '',
       murType: 'parpaing',
       plancherType: 'dalle',
       toitureType: 'combles',
@@ -270,6 +271,9 @@
       champ('Confort été', 'climat.tConfortEte', { kind: 'num', unite: '°C' }) +
       champ('Surpuissance de relance', 'climat.surpuissance', { kind: 'num', unite: '%', cls: 'span-2',
         aide: 'Ajoutée à la puissance de chauffage pour remonter en température après un abaissement de nuit ou une absence. 0 % si le chauffage n\'est jamais abaissé.' }) +
+      champ('Majoration clim', 'climat.majorationClim', { kind: 'num', unite: '%', cls: 'span-2', placeholder: 'auto : 0',
+        aide: 'Ajoutée à la puissance frigorifique (pièces et total). 0 % par défaut : le calcul est déjà une pointe par ciel clair, sans protection solaire. ' +
+          '+10 % : construction légère très vitrée à l\'Ouest, véranda. Pour les canicules, relever plutôt la T° de base été.' }) +
       '</div>' +
       '<h3 class="sub-title">Murs</h3><div class="grid">' +
       liste('Type de paroi', 'climat.murType', D.MURS.map(function (m) { return { value: m.id, label: m.label + ' – R ' + nf(m.r, 2) }; }), { cls: 'span-2' }) +
@@ -599,7 +603,8 @@
 
     setHTML('totals-figures',
       '<div class="tot heat"><span>Chauffage</span><small>' + palierBarre(res.palierChauffage) + '</small><strong>' + kW(res.chauffage) + '</strong></div>' +
-      '<div class="tot cool"><span>Climatisation</span><small>' + palierBarre(res.palierClimatisation) + '</small><strong>' + kW(res.climatisation) + '</strong></div>');
+      '<div class="tot cool" title="Besoin simultané de la maison ; somme des pièces : ' + kW(res.climSommePieces) + '">' +
+      '<span>Clim · pic ' + F.esc(res.climCreneau || '') + '</span><small>' + palierBarre(res.palierClimatisation) + '</small><strong>' + kW(res.climatisation) + '</strong></div>');
 
     setHTML('sub-client', esc(state.client.nom || ''));
     var z = D.find(D.ZONES, state.climat.zone);

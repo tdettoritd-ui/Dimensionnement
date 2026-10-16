@@ -306,21 +306,51 @@ test('climatisation : fenêtre de toit retirée de la toiture, pas des murs', ()
   assert.equal(r.pontsThermiques.longueurs.menuiserie, 0);
 });
 
-test('climatisation : total simultané (soleil maison entière, occupants plafonnés au foyer)', () => {
+test('climatisation : total simultané par créneaux horaires (occupants plafonnés au foyer)', () => {
   const P = (nom, vit, occ) => ({ nom, longueur: '4', largeur: '4', hauteur: '2,5', lineaire: '4', sousToiture: 'non', vitrages: vit, occupants: occ, equipements: '', debit: '' });
   const pieces = [P('Chambre 1', [{ orientation: 'E', type: 'double', surface: '2', volet: 'non' }], '2'),
     P('Chambre 2', [{ orientation: 'O', type: 'double', surface: '2', volet: 'non' }], '2'),
     P('Séjour', [{ orientation: 'S', type: 'double', surface: '4', volet: 'non' }], '4')];
   const r = C.calculChantier({ climat, prime: { personnes: '4' }, pieces });
-  // Soleil simultané < pointes des pièces ; occupants ramenés à 4 personnes sur 8.
   assert.ok(r.climatisation < r.climSommePieces);
-  let sensible = 0;
-  let latent = 0;
-  r.pieces.forEach(x => {
-    sensible += x.clim.sensible - x.apports.solaires + x.clim.solairesSimultanes - x.apports.occupants + 0.5 * x.apports.occupants;
-    latent += x.clim.latent - 0.5 * x.apports.latentOccupants;
-  });
+  // Recalcul à la main : 4 personnes sur 8 ; maximum sur les créneaux.
+  const g = D.find(D.VITRAGES, 'double').g;
+  const cren = (id) => D.find(D.ORIENTATIONS, id).cren;
+  let base = 0, transm = 0, latent = 0;
+  r.pieces.forEach(x => { base += x.apports.equipements + 0.5 * x.apports.occupants; transm += x.clim.transmission; latent += x.apports.latentAir + 0.5 * x.apports.latentOccupants; });
+  const sj = D.CLIM.heuresCreneaux.map((h, j) => base + D.CLIM.partEcartCreneaux[j] * transm + 2 * g * cren('E')[j] + 2 * g * cren('O')[j] + 4 * g * cren('S')[j]);
+  const sensible = Math.min(Math.max(...sj), r.pieces.reduce((s, x) => s + x.clim.sensible, 0));
   proche(r.climSensible, sensible);
   proche(r.climLatent, latent);
   proche(r.climatisation, C.puissanceNominale(sensible, latent));
+  assert.equal(r.climCreneau, D.CLIM.heuresCreneaux[sj.indexOf(Math.max(...sj))]);
+});
+
+test('climatisation : maison vitrée au Sud, pas de foisonnement solaire ; majoration réglable', () => {
+  const P = (nom, or) => ({ nom, longueur: '4', largeur: '4', hauteur: '2,5', lineaire: '4', sousToiture: 'non', occupants: '', equipements: '', debit: '',
+    vitrages: [{ orientation: or, type: 'double', surface: '3', volet: 'non' }] });
+  const sud = C.calculChantier({ climat, prime: { personnes: '4' }, pieces: [P('Séjour', 'S'), P('Chambre 1', 'S'), P('Chambre 2', 'S')] });
+  const mixte = C.calculChantier({ climat, prime: { personnes: '4' }, pieces: [P('Séjour', 'S'), P('Chambre 1', 'E'), P('Chambre 2', 'N')] });
+  // Sud : le soleil des 3 pièces culmine ensemble (15 h) ; le total reste ≤ somme des pièces.
+  assert.ok(sud.climSensible / sud.pieces.reduce((s, x) => s + x.clim.sensible, 0) > mixte.climSensible / mixte.pieces.reduce((s, x) => s + x.clim.sensible, 0));
+  assert.ok(sud.climSensible <= sud.pieces.reduce((s, x) => s + x.clim.sensible, 0) + 1e-9);
+  const maj = C.calculChantier({ climat: { ...climat, majorationClim: '10' }, prime: { personnes: '4' }, pieces: [P('Séjour', 'S')] });
+  const sans = C.calculChantier({ climat, prime: { personnes: '4' }, pieces: [P('Séjour', 'S')] });
+  proche(maj.climatisation, 1.1 * sans.climatisation);
+  proche(maj.pieces[0].climatisation, 1.1 * sans.pieces[0].climatisation);
+  assert.equal(C.majorationClim({ majorationClim: '-5' }), 1);
+  assert.equal(C.majorationClim({}), 1 + D.CLIM.majorationDefaut / 100);
+});
+
+test('climatisation : créneaux cohérents avec les pointes des pièces et la table w', () => {
+  const verticales = D.ORIENTATIONS.filter(o => !o.toit);
+  D.ORIENTATIONS.forEach(o => {
+    assert.equal(o.cren.length, D.CLIM.heuresCreneaux.length, o.id);
+    assert.ok(Math.max(...o.cren) <= 1.2 * o.wPiece, o.id);
+  });
+  // À 17 h, la moyenne des façades redonne la table w « maison entière » à ±10 %.
+  const moy17 = verticales.reduce((s, o) => s + o.cren[3], 0) / verticales.length;
+  const moyW = verticales.reduce((s, o) => s + o.w, 0) / verticales.length;
+  assert.ok(Math.abs(moy17 / moyW - 1) < 0.1);
+  proche(C.rayonnementCreneaux('mixte')[3], moy17);
 });

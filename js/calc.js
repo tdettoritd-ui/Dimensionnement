@@ -81,6 +81,20 @@
     return o ? o.wPiece : 0;
   }
 
+  // Charge solaire simultanée de la maison aux créneaux horaires (W/m² de baie × g) ; « mixte » = moyenne.
+  function rayonnementCreneaux(orientationId) {
+    var n = D.CLIM.heuresCreneaux.length;
+    var valeurs = [];
+    for (var j = 0; j < n; j++) valeurs.push(0);
+    if (orientationId === D.ORIENTATION_MIXTE.id) {
+      var verticales = D.ORIENTATIONS.filter(function (o) { return !o.toit; });
+      verticales.forEach(function (o) { for (var k = 0; k < n; k++) valeurs[k] += o.cren[k] / verticales.length; });
+      return valeurs;
+    }
+    var o = D.find(D.ORIENTATIONS, orientationId);
+    return o && o.cren ? o.cren.slice() : valeurs;
+  }
+
   function fenetreDeToit(vitrage) {
     var o = D.find(D.ORIENTATIONS, vitrage.orientation);
     return !!(o && o.toit);
@@ -272,6 +286,12 @@
     return Math.max(sensible + latent, Math.min(sensible / K.rapportSensible, K.surdimMax * (sensible + latent)));
   }
 
+  // Majoration réglable de la puissance nominale d'été (%, champ « Majoration clim » ; vide = défaut).
+  function majorationClim(climat) {
+    var m = estVide(climat.majorationClim) ? D.CLIM.majorationDefaut : num(climat.majorationClim);
+    return 1 + Math.max(m, 0) / 100;
+  }
+
   // Bilan d'été de la pièce (pointe de la pièce), et termes simultanés pour le total chantier.
   // r : déperditions déjà calculées (u, smur, surface, débit, ponts thermiques).
   function climatisationPiece(piece, climat, foyer, r) {
@@ -285,6 +305,7 @@
     // Baies : soleil (pointe de la pièce / simultané maison) et conduction (volets ouverts le jour).
     var solaires = 0;
     var solairesSimultanes = 0;
+    var solairesCreneaux = rayonnementCreneaux(null);
     var vitrages = 0;
     vitragesPiece(piece).forEach(function (v) {
       var s = Math.max(num(v.surface), 0);
@@ -293,6 +314,8 @@
       var verticale = !fenetreDeToit(v);
       solaires += s * type.g * rayonnementPiece(v.orientation) * (legere && verticale ? K.solaireLeger : 1);
       solairesSimultanes += s * type.g * rayonnement(v.orientation);
+      var facteur = legere && verticale ? K.solaireLeger : 1;
+      rayonnementCreneaux(v.orientation).forEach(function (w, j) { solairesCreneaux[j] += s * type.g * w * facteur; });
       vitrages += Math.max(type.u, U_VITRAGE_MIN) * s * ecart;
     });
 
@@ -327,13 +350,16 @@
       apports: apports,
       sensible: sensible,
       latent: latent,
-      nominale: puissanceNominale(sensible, latent),
+      nominale: puissanceNominale(sensible, latent) * majorationClim(climat),
       occupants: occupants,
       occupantsAuto: occupantsAuto,
       equipements: equipements,
       equipementsAuto: equipementsAuto,
       pieceLegere: legere,
-      solairesSimultanes: solairesSimultanes
+      solairesSimultanes: solairesSimultanes,
+      solairesCreneaux: solairesCreneaux,
+      // Termes proportionnels à l'écart été (T ext - T int), pondérés à chaque créneau.
+      transmission: vitrages + murs + toiture + ponts + ventilation
     };
   }
 
@@ -432,31 +458,47 @@
     var regimeEau = chantier.installation ? chantier.installation.regimeEau : undefined;
     var foyer = foyerChantier(chantier);
     var pieces = (chantier.pieces || []).map(function (p) { return calculPiece(p, chantier.climat, regimeEau, foyer.n); });
+    var K = D.CLIM;
     var chauffage = 0;
     var sommePieces = 0;
-    var sensible = 0;
-    var latent = 0;
+    var sommeSensible = 0;
+    var equipements = 0;
+    var transmission = 0;
+    var latentAir = 0;
     var occupants = 0;
     var occupantsMax = 0;
     var occupantsSensible = 0;
     var occupantsLatent = 0;
+    var solaires = rayonnementCreneaux(null);
     pieces.forEach(function (r) {
       var c = r.clim;
       chauffage += r.chauffage;
       sommePieces += c.nominale;
-      // Total simultané : soleil « maison entière » ; occupants comptés à part (plafonnés au foyer).
-      sensible += c.sensible - c.apports.solaires + c.solairesSimultanes - c.apports.occupants;
-      latent += c.latent - c.apports.latentOccupants;
+      sommeSensible += c.sensible;
+      equipements += c.apports.equipements;
+      transmission += c.transmission;
+      latentAir += c.apports.latentAir;
       occupants += c.occupants;
       occupantsMax = Math.max(occupantsMax, c.occupants);
       occupantsSensible += c.apports.occupants;
       occupantsLatent += c.apports.latentOccupants;
+      c.solairesCreneaux.forEach(function (q, j) { solaires[j] += q; });
     });
+    // Occupants simultanés plafonnés au foyer (ou à la pièce la plus occupée).
     var plafond = Math.max(foyer.n, occupantsMax);
     var part = occupants > plafond ? plafond / occupants : 1;
-    sensible += part * occupantsSensible;
-    latent += part * occupantsLatent;
-    var climatisation = puissanceNominale(sensible, latent);
+    // Total simultané : maximum sur les créneaux horaires (soleil de la maison + écart extérieur de l'heure),
+    // sans dépasser la somme des pointes des pièces.
+    var sensible = 0;
+    var creneau = 0;
+    var parCreneau = solaires.map(function (q, j) {
+      var sj = equipements + part * occupantsSensible + K.partEcartCreneaux[j] * transmission + q;
+      if (sj > sensible) { sensible = sj; creneau = j; }
+      return sj;
+    });
+    sensible = Math.min(sensible, sommeSensible);
+    var latent = latentAir + part * occupantsLatent;
+    var climatisation = puissanceNominale(sensible, latent) * majorationClim(chantier.climat || {});
     return {
       pieces: pieces,
       chauffage: chauffage,
@@ -464,6 +506,9 @@
       climatisation: climatisation,
       climSensible: sensible,
       climLatent: latent,
+      climCreneau: K.heuresCreneaux[creneau],
+      climParCreneau: parCreneau,
+      climMajoration: majorationClim(chantier.climat || {}),
       // Somme des puissances des pièces (unités intérieures) : non simultanée, indicative.
       climSommePieces: sommePieces,
       foyer: foyer,
@@ -509,6 +554,8 @@
     pontsThermiques: pontsThermiques,
     rayonnement: rayonnement,
     rayonnementPiece: rayonnementPiece,
+    rayonnementCreneaux: rayonnementCreneaux,
+    majorationClim: majorationClim,
     etdMur: etdMur,
     etdToiture: etdToiture,
     typesPiece: typesPiece,

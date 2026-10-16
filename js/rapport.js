@@ -226,6 +226,7 @@
         ['Base hiver / été', k.tBaseHiver + ' °C / ' + k.tBaseEte + ' °C'],
         ['Confort hiver / été', k.tConfortHiver + ' °C / ' + k.tConfortEte + ' °C'],
         ['Surpuissance de relance', (C.estVide(k.surpuissance) ? '0' : k.surpuissance) + ' %'],
+        ['Majoration clim', (C.estVide(k.majorationClim) ? '0' : k.majorationClim) + ' %'],
         ['Murs', F.libelle(D.MURS, k.murType) + ' + ' + F.isolantTexte(k.isolantMur) + ' (U ' + F.nf(u.mur, 2) + ')' +
           ' – ponts thermiques : ' + F.LIBELLES_ISOLATION[C.isolationMur(k)]],
         ['Plancher bas', F.libelle(D.PLANCHERS, k.plancherType) + (k.plancherType !== 'aucun' ? ' + ' + F.isolantTexte(k.isolantPlancher) : '') + ' (U ' + F.nf(u.plancher, 2) + ')'],
@@ -277,8 +278,8 @@
     });
     y = doc.lastAutoTable.finalY + 4;
     police(doc, 7.5, false, GRIS);
-    var noteClim = doc.splitTextToSize(t('* Climatisation : besoin simultané de la maison (soleil et occupants non simultanés dans toutes les pièces), ' +
-      'pour le groupe extérieur. Somme des pièces : ' + F.kW(res.climSommePieces) + ' (unités intérieures). ' +
+    var noteClim = doc.splitTextToSize(t('* Climatisation : besoin simultané de la maison (pic à ' + res.climCreneau + ', heure d\'été ; ' +
+      'soleil et occupants non simultanés dans toutes les pièces), pour le groupe extérieur. Somme des pièces : ' + F.kW(res.climSommePieces) + ' (unités intérieures). ' +
       'Puissances frigorifiques nominales air/air, humidité (latent) comprise.'), UTILE);
     doc.text(noteClim, MARGE, y + 2);
     y += noteClim.length * 3.4 + 5;
