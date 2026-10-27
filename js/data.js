@@ -87,7 +87,17 @@
     // (moyenne observée sur 127 maisons, chaque jonction étant partagée entre deux pièces).
     refendParPiece: 0.25,
     // Saisie rapide des vitrages : périmètre des menuiseries ≈ 3 m par m² de baie (médiane des DPE).
-    perimetreRapide: 3.0
+    perimetreRapide: 3.0,
+    // Mode global : refends comptés au prorata de la surface, comme une pièce de 14 m² (0,25 × H).
+    refendParM2: 0.25 / 14
+  };
+
+  // Mode global (volume total) : le logement est saisi d'un bloc (surface, hauteur, niveaux).
+  var GLOBAL = {
+    niveauxMax: 4,
+    // Périmètre estimé d'un niveau : emprise rectangulaire de proportions 1 × 1,5,
+    // soit 2 × (√1,5 + 1/√1,5) ≈ 4,1 × √emprise. Réduire si le logement est mitoyen.
+    facteurPerimetre: 4.1
   };
 
   // Conductivité des isolants (W/m.K) — lambda null : R isolant = 0
@@ -278,6 +288,7 @@
     POSITIONS_ISOLANT_MUR: POSITIONS_ISOLANT_MUR,
     PLANCHERS_ETAGE: PLANCHERS_ETAGE,
     PONTS_THERMIQUES: PONTS_THERMIQUES,
+    GLOBAL: GLOBAL,
     VITRAGES: VITRAGES,
     ORIENTATIONS: ORIENTATIONS,
     ORIENTATION_MIXTE: ORIENTATION_MIXTE,

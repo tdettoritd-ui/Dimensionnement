@@ -62,6 +62,12 @@
     return ['Releve', client || 'client', state.client.date].filter(Boolean).join('_') + '.pdf';
   }
 
+  function sommeListe(liste, f) {
+    var t = 0;
+    liste.forEach(function (x) { t += f(x); });
+    return t;
+  }
+
   function couleurTexte(doc, rgb) { doc.setTextColor(rgb[0], rgb[1], rgb[2]); }
   function couleurTrait(doc, rgb) { doc.setDrawColor(rgb[0], rgb[1], rgb[2]); }
 
@@ -248,18 +254,40 @@
       ]]
     );
 
-    /* --- Synthèse par pièce --- */
+    // Pièces calculées : celles du relevé, ou les niveaux du mode global (logement saisi d'un bloc).
+    var global = res.mode === 'global';
+    var sources = res.sources;
+    if (global) {
+      var g = state.global;
+      paire(
+        ['Logement (dimensionnement global)', [
+          ['Surface habitable', F.avecUnite(g.surface, 'm²')],
+          ['Hauteur sous plafond', F.avecUnite(g.hauteur, 'm')],
+          ['Niveaux', String(C.niveauxGlobal(g))],
+          ['Périmètre des murs ext.', F.nf(C.perimetreGlobal(g), 1) + ' ml par niveau' + (C.estVide(g.perimetre) ? ' (estimé)' : '')],
+          ['Sous toiture / sur plancher bas', F.texteOuiNon(g.sousToiture) + ' / ' + F.texteOuiNon(g.surPlancherBas)]
+        ]],
+        ['Occupation', [
+          ['Occupants', F.nf(res.foyer.n) + (C.estVide(g.occupants) ? ' (auto)' : '')],
+          ['Éclairage et appareils', F.W(sommeListe(res.pieces, function (r) { return r.clim.equipements; })) + (C.estVide(g.equipements) ? ' (auto)' : '')],
+          ['Surface vitrée', F.nf(sommeListe(res.pieces, function (r) { return r.surfaceVitree; }), 1) + ' m²'],
+          ['Volume', F.nf(sommeListe(res.pieces, function (r) { return r.volume; }), 0) + ' m³']
+        ]]
+      );
+    }
+
+    /* --- Synthèse par pièce (ou par niveau) --- */
     sautSiBesoin(30);
     police(doc, 10.5, true, BLEU);
-    doc.text(t('Synthèse par pièce'), MARGE, y + 4);
+    doc.text(t(global ? 'Synthèse par niveau' : 'Synthèse par pièce'), MARGE, y + 4);
     var surfaceTotale = 0;
-    var lignesPieces = state.pieces.map(function (p, i) {
+    var lignesPieces = sources.map(function (p, i) {
       var r = res.pieces[i];
       surfaceTotale += r.surface;
       var ex = r.radiateurExistant;
       return [
         t(p.nom), t(F.nf(r.surface, 1) + ' m²'), t(F.W(r.chauffage)), t(F.W(r.climatisation)),
-        t(F.textePalierSplit(r.palierSplit)), t(F.textePalierRadiateur(r.radiateurNeuf)),
+        t(global ? '—' : F.textePalierSplit(r.palierSplit)), t(global ? '—' : F.textePalierRadiateur(r.radiateurNeuf)),
         t(ex ? F.W(ex.puissance) + (ex.suffisant ? ' – suffisant' : ' – insuffisant') : '—')
       ];
     });
@@ -267,7 +295,7 @@
       startY: y + 6,
       margin: { left: MARGE, right: MARGE, top: MARGE, bottom: BAS },
       theme: 'grid',
-      head: [['Pièce', 'Surface', 'Chauffage', 'Climatisation', 'Split', 'Radiateur neuf', 'Radiateur existant'].map(t)],
+      head: [[global ? 'Niveau' : 'Pièce', 'Surface', 'Chauffage', 'Climatisation', 'Split', 'Radiateur neuf', 'Radiateur existant'].map(t)],
       body: lignesPieces,
       showFoot: 'lastPage',
       foot: [[t('Total'), t(F.nf(surfaceTotale, 1) + ' m²'), t(F.kW(res.chauffage)), t(F.kW(res.climatisation) + ' *'), '', '', '']],
@@ -301,25 +329,28 @@
       return h + doc.splitTextToSize(nom, LARGEUR_LIBELLE - 3).length * 4.3 + 3;
     }
 
-    state.pieces.forEach(function (p, i) {
+    sources.forEach(function (p, i) {
       var r = res.pieces[i];
       var vitrages = F.lignesVitrages(p, r);
       var lignes = [
-        ['Dimensions', (p.longueur || '?') + ' × ' + (p.largeur || '?') + ' × ' + (p.hauteur || '?') + ' m · ' + F.nf(r.surface, 1) + ' m² · ' + F.nf(r.volume, 1) + ' m³'],
-        ['Murs ext. exposés', (F.avecUnite(p.lineaire, 'ml') || '—') + ' · sous toiture : ' + F.texteOuiNon(p.sousToiture) +
+        ['Dimensions', p.virtuel
+          ? F.nf(r.surface, 1) + ' m² × ' + F.nf(C.num(p.hauteur), 2) + ' m · ' + F.nf(r.volume, 1) + ' m³'
+          : (p.longueur || '?') + ' × ' + (p.largeur || '?') + ' × ' + (p.hauteur || '?') + ' m · ' + F.nf(r.surface, 1) + ' m² · ' + F.nf(r.volume, 1) + ' m³'],
+        ['Murs ext. exposés', (p.virtuel ? F.nf(C.num(p.lineaire), 1) + ' ml' : (F.avecUnite(p.lineaire, 'ml') || '—')) + ' · sous toiture : ' + F.texteOuiNon(p.sousToiture) +
           ' · sur plancher bas : ' + F.texteOuiNon(p.surPlancherBas)],
         ['Vitrages', vitrages.length ? vitrages.join('\n') : '—'],
-        ['Occupants / équipements', (p.occupants || '0') + ' (' + F.libelle(D.ACTIVITES, p.activite) + ') · ' + (p.equipements || '0') + ' W'],
+        ['Occupants / équipements', F.nf(r.clim.occupants, 1) + ' (' + F.libelle(D.ACTIVITES, p.activite) + ') · ' + F.W(r.clim.equipements)],
         ['Ventilation', F.nf(r.debit, 1) + ' m³/h' + (r.debitAuto ? ' (estimé)' : '')],
         ['Climatisation', F.W(r.clim.sensible) + ' sensible + ' + F.W(r.clim.latent) + ' latent -> ' + F.W(r.climatisation) +
-          ' nominal · split ' + F.textePalierSplit(r.palierSplit) +
+          ' nominal' + (p.virtuel ? '' : ' · split ' + F.textePalierSplit(r.palierSplit)) +
           ' (' + F.nf(r.clim.occupants) + ' occupant' + (r.clim.occupants > 1 ? 's' : '') + ', équipements ' + F.W(r.clim.equipements) + ')'],
         ['Déperditions G', F.nf(r.G, 2) + ' W/K (dont ponts thermiques ' + F.nf(r.deperditions.pontsThermiques, 2) + ') · base ' +
           F.W(r.chauffageBase) + ' + relance ' + F.nf(r.surpuissance) + ' %'],
         ['Radiateur neuf préconisé', F.textePalierRadiateur(r.radiateurNeuf) +
           (r.facteurRegime !== 1 && r.radiateurNeuf.valeur ? ' (catalogue ΔT50, régime ' + ins.regimeEau + ' °C)' : '')],
         ['Radiateur existant', F.texteRadiateurExistant(p, r, ins.regimeEau)]
-      ].map(function (l) { return [t(l[0]), t(l[1])]; });
+      ].filter(function (l) { return !(p.virtuel && /^Radiateur/.test(l[0])); })
+        .map(function (l) { return [t(l[0]), t(l[1])]; });
       var nom = t(p.nom);
       sautSiBesoin(Math.min(hauteurBloc(nom, lignes) * 1.1, HAUT - BAS - MARGE - 2));
 

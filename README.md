@@ -10,6 +10,7 @@ Application web (PWA) pour réaliser un relevé technique chez un client et obte
 - **Envoi par email** : partage du PDF via le menu du téléphone (Mail, Gmail, Outlook…), ou email pré-rempli dans la messagerie (destinataire, objet, synthèse).
 - **Mon entreprise** (icône immeuble en haut) : logo, coordonnées, technicien — repris dans le PDF et l'email.
 - **Vitrages** : saisie détaillée fenêtre par fenêtre, ou rapide (peu / moyennement / très vitré).
+- **Deux modes de dimensionnement** : pièce par pièce (split et radiateur conseillés par pièce) ou global (volume total : surface, hauteur, niveaux, périmètre, vitrages du logement).
 
 ## Utilisation
 
@@ -41,6 +42,8 @@ Pour un usage terrain, héberger le dossier sur n'importe quel hébergement stat
 | `tests/calc.test.js` | Tests du moteur de calcul |
 
 ## Méthode de calcul
+
+**Mode global (volume total)** : le logement est saisi d'un bloc (surface habitable, hauteur, 1 à 3 niveaux, périmètre des murs extérieurs par niveau, vitrages, occupants). Il est découpé en niveaux virtuels calculés exactement comme des pièces : emprise = surface / niveaux, plancher bas au premier niveau, toiture au dernier, planchers d'étage entre les deux (ponts thermiques compris), baies réparties entre les niveaux (fenêtres de toit au dernier). Valeurs automatiques si le champ est vide : périmètre `4,1 × √emprise` (rectangle 1 × 1,5, maison isolée ; réduire si mitoyenne), occupants = personnes du foyer (encart Prime, sinon 4), éclairage et appareils 7 W/m², refends au prorata (0,25 × H par 14 m²). Sur une maison de 100 m² de plain-pied, le mode global donne le même résultat que le relevé pièce par pièce à moins de 3 % près (chauffage 9,23 kW contre 9,20 ; clim 5,57 contre 5,43). Pas de split ni de radiateur par pièce dans ce mode.
 
 Par pièce :
 

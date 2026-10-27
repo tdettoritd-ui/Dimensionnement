@@ -42,7 +42,10 @@
     if (res.anah) {
       l.push('- Catégorie Anah / MaPrimeRénov\' : ' + res.anah.categorie.label + ' (' + res.anah.categorie.detail.toLowerCase() + ')');
     }
-    l.push('- Pièces relevées : ' + state.pieces.length, '', 'Nous restons à votre disposition pour toute question.', '', 'Cordialement,');
+    l.push(state.mode === 'global'
+      ? '- Dimensionnement global : ' + (state.global.surface || '?') + ' m² habitables, ' + C.niveauxGlobal(state.global) + ' niveau(x)'
+      : '- Pièces relevées : ' + state.pieces.length);
+    l.push('', 'Nous restons à votre disposition pour toute question.', '', 'Cordialement,');
     [ent.technicien, ent.nom, [ent.telephone, ent.email].filter(Boolean).join(' · ')]
       .filter(Boolean).forEach(function (x) { l.push(x); });
     return l.join('\n');

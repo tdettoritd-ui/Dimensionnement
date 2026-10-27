@@ -93,9 +93,28 @@
     return { uid: uid(), orientation: 'S', type: 'double', surface: '', volet: 'non' };
   }
 
-  function nouveauChantier(climat) {
+  // Mode global (volume total) : le logement saisi d'un bloc.
+  function nouveauGlobal() {
+    return {
+      surface: '',
+      hauteur: '2,5',
+      niveaux: '1',
+      perimetre: '',
+      sousToiture: 'oui',
+      surPlancherBas: 'oui',
+      vitrageMode: 'rapide',
+      vitrages: [],
+      vitrageRapide: { niveau: 'moyen', orientation: 'mixte', type: 'double', volet: 'non' },
+      occupants: '',
+      equipements: ''
+    };
+  }
+
+  function nouveauChantier(climat, mode) {
     return {
       id: null,
+      mode: mode === 'global' ? 'global' : 'pieces',
+      global: nouveauGlobal(),
       client: { nom: '', adresse: '', telephone: '', email: '', annee: '', date: aujourdhui(), generation: '' },
       climat: climat || climatDefaut(),
       installation: {
@@ -118,6 +137,11 @@
     ['isolantMur', 'isolantPlancher', 'isolantToiture'].forEach(function (k) {
       out.climat[k] = Object.assign({ materiau: 'aucun', epaisseur: '' }, out.climat[k]);
     });
+    out.mode = c.mode === 'global' ? 'global' : 'pieces';
+    var g = c.global || {};
+    out.global = Object.assign(nouveauGlobal(), g);
+    out.global.vitrageRapide = Object.assign(nouveauGlobal().vitrageRapide, g.vitrageRapide);
+    out.global.vitrages = (g.vitrages || []).map(function (v) { return Object.assign(nouveauVitrage(), v); });
     out.pieces = (c.pieces || []).map(function (p, i) {
       var np = Object.assign(nouvellePiece(i + 1), p);
       np.radiateur = Object.assign(nouvellePiece(1).radiateur, p.radiateur);
@@ -333,11 +357,12 @@
       '<p class="hint">Catégorie Anah / MaPrimeRénov\'. Plafonds ' + D.ANAH.annee + ' (RFR N-1), réindexés chaque année : à recontrôler en début d\'année civile.</p>');
   }
 
-  function renderVitrage(i, j) {
-    var base = 'pieces.' + i + '.vitrages.' + j;
+  // cible : chemin de l'objet portant les vitrages (« pieces.0 » ou « global »).
+  function renderVitrage(cible, j) {
+    var base = cible + '.vitrages.' + j;
     return '<div class="vitrage">' +
       '<div class="vitrage-head"><span>Vitrage ' + (j + 1) + '</span>' +
-      '<button type="button" class="btn ghost small danger" data-action="supprimer-vitrage" data-i="' + i + '" data-j="' + j + '" aria-label="Supprimer le vitrage ' + (j + 1) + '">Supprimer</button></div>' +
+      '<button type="button" class="btn ghost small danger" data-action="supprimer-vitrage" data-base="' + cible + '" data-j="' + j + '" aria-label="Supprimer le vitrage ' + (j + 1) + '">Supprimer</button></div>' +
       '<div class="grid">' +
       liste('Orientation', base + '.orientation', D.ORIENTATIONS.map(function (o) { return { value: o.id, label: o.label }; })) +
       champ('Surface de la baie', base + '.surface', { kind: 'num', unite: 'm²' }) +
@@ -347,14 +372,14 @@
   }
 
   // Saisie rapide : un niveau de vitrage global au lieu de chaque fenêtre.
-  function renderVitrageRapide(p, i) {
-    var base = 'pieces.' + i + '.vitrageRapide';
+  function renderVitrageRapide(cible, idAide) {
+    var base = cible + '.vitrageRapide';
     var orientations = [{ value: D.ORIENTATION_MIXTE.id, label: D.ORIENTATION_MIXTE.label }]
       .concat(D.ORIENTATIONS.filter(function (o) { return !o.toit; }).map(function (o) { return { value: o.id, label: o.label }; }));
     return '<div class="grid">' +
       bascule('Niveau de vitrage', base + '.niveau', D.NIVEAUX_VITRAGE.map(function (n) { return [n.id, n.label.replace(' vitré', '')]; }), { obligatoire: true, cls: 'span-2' }) +
       '</div>' +
-      '<p class="hint" id="vitrage-rapide-' + p.uid + '"></p>' +
+      '<p class="hint" id="' + idAide + '"></p>' +
       '<div class="grid">' +
       liste('Orientation principale', base + '.orientation', orientations, { cls: 'span-2' }) +
       liste('Type de vitrage', base + '.type', table2options(D.VITRAGES), { cls: 'span-2' }) +
@@ -362,15 +387,51 @@
       '</div>';
   }
 
-  function renderVitrages(p, i) {
-    var rapide = p.vitrageMode === 'rapide';
+  function renderVitrages(objet, cible, idAide) {
+    var rapide = objet.vitrageMode === 'rapide';
     return '<div class="grid">' +
-      bascule('Saisie des vitrages', 'pieces.' + i + '.vitrageMode', [['detail', 'Détaillée'], ['rapide', 'Rapide (estimation)']], { obligatoire: true, cls: 'span-2' }) +
+      bascule('Saisie des vitrages', cible + '.vitrageMode', [['detail', 'Détaillée'], ['rapide', 'Rapide (estimation)']], { obligatoire: true, cls: 'span-2' }) +
       '</div>' +
       (rapide
-        ? renderVitrageRapide(p, i)
-        : p.vitrages.map(function (v, j) { return renderVitrage(i, j); }).join('') +
-          '<button type="button" class="btn small" data-action="ajouter-vitrage" data-i="' + i + '">+ Ajouter un vitrage</button>');
+        ? renderVitrageRapide(cible, idAide)
+        : objet.vitrages.map(function (v, j) { return renderVitrage(cible, j); }).join('') +
+          '<button type="button" class="btn small" data-action="ajouter-vitrage" data-base="' + cible + '">+ Ajouter un vitrage</button>');
+  }
+
+  /* ---------- Mode de dimensionnement ---------- */
+
+  function renderMode() {
+    return '<div class="card mode-card"><div class="card-body">' +
+      bascule('Dimensionnement', 'mode', [['pieces', 'Pièce par pièce'], ['global', 'Global (volume total)']], { obligatoire: true }) +
+      '<p class="hint">' + (state.mode === 'global'
+        ? 'Logement saisi d\'un bloc : surface, hauteur, niveaux, périmètre et vitrages. Rapide, mais sans split ni radiateur par pièce.'
+        : 'Chaque pièce est saisie : split et radiateur conseillés pièce par pièce.') + '</p>' +
+      '</div></div>';
+  }
+
+  function renderGlobal() {
+    var g = state.global;
+    return '<div class="pieces-head"><h2>Logement</h2><span class="muted">dimensionnement global</span></div>' +
+      '<section class="card piece" aria-label="Logement"><div class="card-body">' +
+      '<div class="grid">' +
+      champ('Surface habitable', 'global.surface', { kind: 'num', unite: 'm²' }) +
+      champ('Hauteur sous plafond', 'global.hauteur', { kind: 'num', unite: 'm' }) +
+      bascule('Nombre de niveaux', 'global.niveaux', [['1', '1'], ['2', '2'], ['3', '3']], { obligatoire: true, cls: 'span-2' }) +
+      champ('Périmètre des murs ext. par niveau', 'global.perimetre', { kind: 'num', unite: 'ml', cls: 'span-2',
+        aide: '', aideId: 'global-perimetre-aide' }) +
+      bascule('Dernier niveau sous toiture ?', 'global.sousToiture', [['oui', 'Oui'], ['non', 'Non (logement sous un autre)']], { obligatoire: true, cls: 'span-2' }) +
+      bascule('Premier niveau sur plancher bas ?', 'global.surPlancherBas', [['oui', 'Oui'], ['non', 'Non (logement sur un autre)']], { obligatoire: true, cls: 'span-2' }) +
+      '</div>' +
+      '<h4 class="sub-title">Vitrages du logement</h4>' +
+      renderVitrages(g, 'global', 'vitrage-rapide-global') +
+      '<h4 class="sub-title">Occupants et équipements</h4>' +
+      '<div class="grid">' +
+      champ('Occupants', 'global.occupants', { kind: 'num' }) +
+      champ('Éclairage et appareils', 'global.equipements', { kind: 'num', unite: 'W' }) +
+      '<p class="hint span-2">Vides : personnes du foyer (encart Prime, sinon 4) et 7 W/m². La ventilation suit le type choisi dans « Climat ».</p>' +
+      '</div>' +
+      '<div class="results" id="res-global"></div>' +
+      '</div></section>';
   }
 
   function renderRadiateur(p, i) {
@@ -413,7 +474,7 @@
         bascule('Pièce sur plancher bas ?', 'pieces.' + i + '.surPlancherBas', [['oui', 'Oui'], ['non', 'Non (à l\'étage)']], { obligatoire: true, cls: 'span-2' }) +
         '</div>' +
         '<h4 class="sub-title">Vitrages</h4>' +
-        renderVitrages(p, i) +
+        renderVitrages(p, 'pieces.' + i, 'vitrage-rapide-' + p.uid) +
         '<h4 class="sub-title">Apports internes et ventilation</h4>' +
         '<div class="grid">' +
         champ('Occupants', 'pieces.' + i + '.occupants', { kind: 'int' }) +
@@ -454,10 +515,12 @@
     var y = window.scrollY;
 
     document.getElementById('app').innerHTML =
-      renderClient() + renderClimat() + renderInstallation() + renderPrime() +
-      '<div class="pieces-head"><h2>Pièces</h2><span class="muted" id="nb-pieces"></span></div>' +
-      state.pieces.map(renderPiece).join('') +
-      '<button type="button" class="btn add-piece" data-action="ajouter-piece">+ Ajouter une pièce</button>' +
+      renderClient() + renderClimat() + renderInstallation() + renderPrime() + renderMode() +
+      (state.mode === 'global'
+        ? renderGlobal()
+        : '<div class="pieces-head"><h2>Pièces</h2><span class="muted" id="nb-pieces"></span></div>' +
+          state.pieces.map(renderPiece).join('') +
+          '<button type="button" class="btn add-piece" data-action="ajouter-piece">+ Ajouter une pièce</button>') +
       '<datalist id="noms-pieces">' +
       ['Séjour', 'Salon', 'Salle à manger', 'Cuisine', 'Chambre', 'Chambre parentale', 'Bureau', 'Salle de bain', 'Salle d\'eau', 'Entrée', 'Couloir', 'Véranda', 'Buanderie']
         .map(function (n) { return '<option value="' + esc(n) + '">'; }).join('') +
@@ -548,10 +611,95 @@
     if (el && el.innerHTML !== html) el.innerHTML = html;
   }
 
+  // Somme d'un poste sur les niveaux du mode global.
+  function somme(liste, f) {
+    var t = 0;
+    liste.forEach(function (x) { t += f(x); });
+    return t;
+  }
+
+  function blocGlobal(res) {
+    var P = res.pieces;
+    var g = state.global;
+    var surface = somme(P, function (r) { return r.surface; });
+    var d = function (k) { return somme(P, function (r) { return r.deperditions[k]; }); };
+    var a = function (k) { return somme(P, function (r) { return r.apports[k]; }); };
+    var G = somme(P, function (r) { return r.G; });
+    var parNiveau = P.length > 1
+      ? '<table class="mini"><tbody><tr class="sep"><th>Niveau</th><td>Chauffage · Clim (pointe)</td></tr>' +
+        P.map(function (r, k) {
+          return '<tr><th>' + esc(res.sources[k].nom) + (res.sources[k].sousToiture === 'oui' ? ' (sous toiture)' : '') + '</th><td>' +
+            kW(r.chauffage) + ' · ' + kW(r.climatisation) + '</td></tr>';
+        }).join('') + '</tbody></table>'
+      : '';
+    return '<div class="kpis">' +
+      '<div class="kpi heat"><span>Chauffage</span><strong>' + kW(res.chauffage) + '</strong><small>' + (surface > 0 ? nf(res.chauffage / surface) + ' W/m²' : '') + '</small></div>' +
+      '<div class="kpi cool"><span>Climatisation</span><strong>' + kW(res.climatisation) + '</strong><small>pic ' + esc(res.climCreneau) + (surface > 0 ? ' · ' + nf(res.climatisation / surface) + ' W/m²' : '') + '</small></div>' +
+      '</div>' +
+      '<div class="reco"><span>Paliers PAC / groupe extérieur</span><strong>' + F.textePalierPac(res.palierChauffage) + ' · ' + F.textePalierPac(res.palierClimatisation) + '</strong>' +
+      '<small class="reco-note">chauffage · climatisation ; pour les splits et radiateurs pièce par pièce, passer en mode « Pièce par pièce ».</small></div>' +
+      parNiveau +
+      '<details class="detail" data-key="detail"><summary>Détail du calcul</summary>' +
+      '<table class="mini"><tbody>' +
+      '<tr><th>Surface / volume</th><td>' + nf(surface, 1) + ' m² · ' + nf(somme(P, function (r) { return r.volume; }), 0) + ' m³</td></tr>' +
+      '<tr><th>Périmètre retenu par niveau</th><td>' + nf(C.perimetreGlobal(g), 1) + ' ml' + (C.estVide(g.perimetre) ? ' (estimé)' : '') + '</td></tr>' +
+      '<tr><th>Surface murs nette</th><td>' + nf(somme(P, function (r) { return r.smur; }), 1) + ' m²</td></tr>' +
+      '<tr><th>Surface vitrée</th><td>' + nf(somme(P, function (r) { return r.surfaceVitree; }), 1) + ' m²</td></tr>' +
+      '<tr class="sep"><th colspan="2">Déperditions (W/K)</th></tr>' +
+      '<tr><th>Murs</th><td>' + nf(d('murs'), 1) + '</td></tr>' +
+      '<tr><th>Toiture</th><td>' + nf(d('toiture'), 1) + '</td></tr>' +
+      '<tr><th>Plancher</th><td>' + nf(d('plancher'), 1) + '</td></tr>' +
+      '<tr><th>Vitrages</th><td>' + nf(d('vitrages'), 1) + '</td></tr>' +
+      '<tr><th>Ponts thermiques (' + LIBELLES_ISOLATION[P.length ? P[0].pontsThermiques.isolation : 'iti'] + ')</th><td>' + nf(d('pontsThermiques'), 1) + '</td></tr>' +
+      '<tr><th>Renouvellement d\'air</th><td>' + nf(d('air'), 1) + '</td></tr>' +
+      '<tr class="total"><th>G</th><td>' + nf(G, 1) + ' W/K</td></tr>' +
+      '<tr><th>Puissance de base (G × ΔT)</th><td>' + W(somme(P, function (r) { return r.chauffageBase; })) + '</td></tr>' +
+      '<tr><th>Surpuissance de relance</th><td>+ ' + nf(P.length ? P[0].surpuissance : 0) + ' % = ' + W(res.chauffage) + '</td></tr>' +
+      '<tr class="sep"><th colspan="2">Apports été, pointe des niveaux (W)</th></tr>' +
+      '<tr><th>Soleil par les baies</th><td>' + nf(a('solaires')) + '</td></tr>' +
+      '<tr><th>Conduction des baies</th><td>' + nf(a('vitrages')) + '</td></tr>' +
+      '<tr><th>Murs au soleil</th><td>' + nf(a('murs')) + '</td></tr>' +
+      '<tr><th>Toiture / combles</th><td>' + nf(a('toiture')) + '</td></tr>' +
+      '<tr><th>Ponts thermiques</th><td>' + nf(a('pontsThermiques')) + '</td></tr>' +
+      '<tr><th>Air (ventilation)</th><td>' + nf(a('ventilation')) + '</td></tr>' +
+      '<tr><th>Occupants (' + nf(res.foyer.n) + ')</th><td>' + nf(a('occupants')) + '</td></tr>' +
+      '<tr><th>Éclairage et appareils</th><td>' + nf(a('equipements')) + '</td></tr>' +
+      '<tr class="total"><th>Total simultané (pic ' + esc(res.climCreneau) + ')</th><td>' + W(res.climSensible) + ' sensible + ' + W(res.climLatent) + ' latent</td></tr>' +
+      '<tr class="total"><th>Puissance nominale</th><td>' + W(res.climatisation) + '</td></tr>' +
+      '</tbody></table>' +
+      '<p class="hint">Puissance frigorifique nominale air/air, latent compris. Le total tient compte du soleil et des occupants non simultanés.</p></details>';
+  }
+
+  function rafraichirGlobal(res) {
+    var g = state.global;
+    var cible = document.getElementById('res-global');
+    if (cible) {
+      setHTML('res-global', blocGlobal(res));
+      var det = cible.querySelector('details');
+      if (det) { det.open = !!ui.detail.global; det.dataset.uid = 'global'; }
+    }
+    var surface = somme(res.pieces, function (r) { return r.surface; });
+    var champPerimetre = document.querySelector('[data-bind="global.perimetre"]');
+    if (champPerimetre) champPerimetre.placeholder = 'auto : ' + nf(C.perimetreGlobal(g), 1);
+    setHTML('global-perimetre-aide', C.estVide(g.perimetre)
+      ? 'Vide : estimation 4,1 × √(surface par niveau) pour une maison isolée. Réduire si mitoyenne.'
+      : '');
+    var occ = document.querySelector('[data-bind="global.occupants"]');
+    if (occ) occ.placeholder = 'auto : ' + nf(res.foyer.n);
+    var equip = document.querySelector('[data-bind="global.equipements"]');
+    if (equip) equip.placeholder = 'auto : ' + nf(Math.round(somme(res.pieces, function (r) { return r.clim.equipements; })));
+    var niveau = D.find(D.NIVEAUX_VITRAGE, g.vitrageRapide.niveau);
+    setHTML('vitrage-rapide-global', niveau
+      ? 'Surface vitrée estimée : ' + nf(somme(res.pieces, function (r) { return r.surfaceVitree; }), 1) + ' m² (' +
+        nf(niveau.ratio * 100) + ' % de la surface habitable' + (surface > 0 ? '' : ', à calculer après saisie de la surface') + ').'
+      : '');
+  }
+
   function rafraichir() {
     var res = C.calculChantier(state);
 
-    state.pieces.forEach(function (p, i) {
+    if (res.mode === 'global') rafraichirGlobal(res);
+    else state.pieces.forEach(function (p, i) {
       var r = res.pieces[i];
       setHTML('chips-' + p.uid, '<span class="chip heat">' + nf(r.chauffage / 1000, 2) + '</span><span class="chip cool">' + nf(r.climatisation / 1000, 2) + '</span>');
       var cible = document.getElementById('res-' + p.uid);
@@ -688,10 +836,10 @@
         render();
         return;
       case 'ajouter-vitrage':
-        p.vitrages.push(nouveauVitrage());
+        getPath(state, bt.dataset.base).vitrages.push(nouveauVitrage());
         break;
       case 'supprimer-vitrage':
-        p.vitrages.splice(j, 1);
+        getPath(state, bt.dataset.base).vitrages.splice(j, 1);
         break;
       case 'auto-lineaire':
         p.lineaire = String(Math.round(2 * (C.num(p.longueur) + C.num(p.largeur)) * 100) / 100).replace('.', ',');
@@ -793,7 +941,7 @@
   function nouveauReleve() {
     if (!confirm('Démarrer un nouveau relevé ?\nClient, installation, prime et pièces seront réinitialisés (les réglages climat / enveloppe sont conservés).' +
       (modifie ? '\n\nAttention : des modifications ne sont pas sauvegardées.' : ''))) return;
-    state = nouveauChantier(JSON.parse(JSON.stringify(state.climat)));
+    state = nouveauChantier(JSON.parse(JSON.stringify(state.climat)), state.mode);
     modifie = false;
     ui.replie = {};
     ui.detail = {};

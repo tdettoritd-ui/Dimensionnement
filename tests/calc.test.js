@@ -354,3 +354,46 @@ test('climatisation : créneaux cohérents avec les pointes des pièces et la ta
   assert.ok(Math.abs(moy17 / moyW - 1) < 0.1);
   proche(C.rayonnementCreneaux('mixte')[3], moy17);
 });
+
+test('mode global : niveaux virtuels, périmètre estimé, fenêtres réparties', () => {
+  const g = { surface: '120', hauteur: '2,5', niveaux: '2', perimetre: '', sousToiture: 'oui', surPlancherBas: 'oui',
+    vitrageMode: 'detail', occupants: '', equipements: '',
+    vitrages: [{ orientation: 'S', type: 'double', surface: '4', volet: 'non' }, { orientation: 'O', type: 'double', surface: '3', volet: 'non' },
+      { orientation: 'N', type: 'double', surface: '2', volet: 'non' }, { orientation: 'toit', type: 'double_argon', surface: '1', volet: 'non' }] };
+  proche(C.perimetreGlobal(g), D.GLOBAL.facteurPerimetre * Math.sqrt(60));
+  assert.equal(C.perimetreGlobal({ ...g, perimetre: '25' }), 25);
+  const niveaux = C.piecesGlobales(g, 4);
+  assert.equal(niveaux.length, 2);
+  // Plancher bas au niveau 1, toiture au dernier niveau.
+  assert.deepEqual(niveaux.map(n => [n.surPlancherBas, n.sousToiture]), [['oui', 'non'], ['non', 'oui']]);
+  // Toutes les baies réparties une seule fois ; fenêtre de toit au dernier niveau.
+  assert.equal(niveaux.reduce((s, n) => s + n.vitrages.length, 0), 4);
+  assert.ok(niveaux[1].vitrages.some(v => v.orientation === 'toit'));
+  // Occupants : le foyer réparti sur les niveaux.
+  proche(niveaux.reduce((s, n) => s + C.num(n.occupants), 0), 4);
+  const r = C.calculChantier({ mode: 'global', climat, prime: { personnes: '4' }, global: g, pieces: [] });
+  assert.equal(r.mode, 'global');
+  assert.equal(r.pieces.length, 2);
+  proche(r.pieces.reduce((s, x) => s + x.surface, 0), 120);
+  // Plancher d'étage compté une seule fois (moitié de chaque côté).
+  proche(r.pieces[0].pontsThermiques.longueurs.plancherIntermediaire + r.pieces[1].pontsThermiques.longueurs.plancherIntermediaire,
+    C.perimetreGlobal(g));
+  assert.ok(r.chauffage > 0 && r.climatisation > 0);
+});
+
+test('mode global : cohérent avec le calcul pièce par pièce du même logement', () => {
+  const iso = (m, e) => ({ materiau: m, epaisseur: String(e) });
+  const A = { ...climat, isolantMur: iso('pse', 4), isolantToiture: iso('laine_verre', 10), positionIsolantMur: 'interieur', surpuissance: '10' };
+  const PM = (nom, L, l, lin, vit, occ) => ({ nom, longueur: String(L), largeur: String(l), hauteur: '2,5', lineaire: String(lin), sousToiture: 'oui',
+    surPlancherBas: 'oui', vitrageMode: 'detail', occupants: String(occ), activite: 'sedentaire', equipements: '', debit: '',
+    vitrages: vit.map(([o, s]) => ({ orientation: o, type: 'double', surface: String(s), volet: 'oui' })) });
+  const pieces = [PM('Séjour', 7, 5, 12, [['S', 4], ['O', 2]], 4), PM('Cuisine', 4, 3, 4, [['E', 1.5]], 2), PM('Chambre 1', 4, 3.5, 7.5, [['E', 1.6]], 2),
+    PM('Chambre 2', 4, 3, 7, [['N', 1.2]], 1), PM('Chambre 3', 3.7, 3, 3.7, [['O', 1.4]], 1), PM('Salle de bain', 3.5, 2, 3.5, [['N', 0.6]], 0),
+    PM('Entrée', 3, 3, 3, [['N', 0.5]], 0)];
+  const parPiece = C.calculChantier({ mode: 'pieces', climat: A, prime: { personnes: '4' }, pieces });
+  const g = { surface: '100.1', hauteur: '2,5', niveaux: '1', perimetre: '', sousToiture: 'oui', surPlancherBas: 'oui', vitrageMode: 'detail',
+    vitrages: [].concat(...pieces.map(p => p.vitrages)), occupants: '', equipements: '' };
+  const global = C.calculChantier({ mode: 'global', climat: A, prime: { personnes: '4' }, global: g, pieces });
+  assert.ok(Math.abs(global.chauffage / parPiece.chauffage - 1) < 0.05, 'chauffage à ±5 %');
+  assert.ok(Math.abs(global.climatisation / parPiece.climatisation - 1) < 0.05, 'climatisation à ±5 %');
+});

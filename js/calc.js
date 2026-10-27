@@ -209,7 +209,8 @@
       }
       if (climat.plancherEtage === 'leger') l.plancherIntermediaire = 0;
       d.plancherIntermediaire = T.plancherIntermediaire[iso] * l.plancherIntermediaire;
-      l.refend = T.refendParPiece * H;
+      // Pièce virtuelle du mode global : longueur de refends fournie (au prorata de la surface).
+      l.refend = typeof piece.longueurRefend === 'number' ? piece.longueurRefend : T.refendParPiece * H;
       d.refend = T.refend[iso] * l.refend;
       if (!mur.bois) {
         if (piece.vitrageMode === 'rapide') {
@@ -268,15 +269,83 @@
     return { occupants: occupants, equipements: equipements };
   }
 
-  // Personnes du foyer : encart Prime ; sinon nombre de chambres + 1 ; sinon valeur par défaut.
+  // Personnes du foyer : occupants saisis en mode global ; encart Prime ; sinon nombre de
+  // chambres + 1 (mode pièce par pièce) ; sinon valeur par défaut.
   function foyerChantier(chantier) {
+    if (chantier.mode === 'global') {
+      var occ = chantier.global ? num(chantier.global.occupants) : 0;
+      if (occ > 0) return { n: occ, source: 'global' };
+    }
     var n = chantier.prime ? Math.floor(num(chantier.prime.personnes)) : 0;
     if (n >= 1) return { n: n, source: 'prime' };
+    if (chantier.mode === 'global') return { n: D.CLIM.foyerDefaut, source: 'defaut' };
     var chambres = 0;
     (chantier.pieces || []).forEach(function (p) {
       if (typesPiece(p.nom).some(function (t) { return t.id === 'chambre'; })) chambres++;
     });
     return chambres ? { n: chambres + 1, source: 'chambres' } : { n: D.CLIM.foyerDefaut, source: 'defaut' };
+  }
+
+  /* ---------- Mode global (volume total) ---------- */
+
+  function niveauxGlobal(g) {
+    var n = Math.floor(num(g.niveaux)) || 1;
+    return Math.max(1, Math.min(n, D.GLOBAL.niveauxMax));
+  }
+
+  // Périmètre des murs extérieurs d'un niveau : la saisie, sinon l'estimation 4,1 × √emprise.
+  function perimetreGlobal(g) {
+    if (!estVide(g.perimetre)) return Math.max(num(g.perimetre), 0);
+    return D.GLOBAL.facteurPerimetre * Math.sqrt(Math.max(num(g.surface), 0) / niveauxGlobal(g));
+  }
+
+  // Le logement saisi d'un bloc est découpé en niveaux virtuels, calculés comme des pièces :
+  // plancher bas au premier niveau, toiture au dernier, planchers d'étage entre les deux.
+  // Les baies sont réparties entre les niveaux (fenêtres de toit au dernier niveau).
+  function piecesGlobales(g, foyer) {
+    g = g || {};
+    var n = niveauxGlobal(g);
+    var surface = Math.max(num(g.surface), 0);
+    var emprise = surface / n;
+    var hauteur = estVide(g.hauteur) ? 2.5 : Math.max(num(g.hauteur), 0);
+    var perimetre = perimetreGlobal(g);
+    var occupants = estVide(g.occupants) ? foyer : Math.max(num(g.occupants), 0);
+    var niveaux = [];
+    for (var k = 0; k < n; k++) {
+      niveaux.push({
+        uid: 'global-' + k,
+        virtuel: true,
+        nom: n > 1 ? 'Niveau ' + (k + 1) : 'Logement',
+        longueur: String(emprise),
+        largeur: '1',
+        hauteur: String(hauteur),
+        lineaire: String(perimetre),
+        sousToiture: k === n - 1 && g.sousToiture !== 'non' ? 'oui' : 'non',
+        surPlancherBas: k === 0 && g.surPlancherBas !== 'non' ? 'oui' : 'non',
+        vitrageMode: g.vitrageMode === 'rapide' ? 'rapide' : 'detail',
+        vitrageRapide: g.vitrageRapide,
+        vitrages: [],
+        occupants: String(occupants / n),
+        activite: 'sedentaire',
+        equipements: estVide(g.equipements) ? '' : String(Math.max(num(g.equipements), 0) / n),
+        debit: '',
+        longueurRefend: D.PONTS_THERMIQUES.refendParM2 * emprise * hauteur,
+        radiateur: null
+      });
+    }
+    // Baies : la plus grande d'abord, sur le niveau le moins vitré ; fenêtres de toit en haut.
+    var vitrees = niveaux.map(function () { return 0; });
+    (g.vitrages || []).slice().sort(function (a, b) { return num(b.surface) - num(a.surface); }).forEach(function (v) {
+      var cible = 0;
+      if (fenetreDeToit(v)) {
+        cible = n - 1;
+      } else {
+        for (var j = 1; j < n; j++) if (vitrees[j] < vitrees[cible]) cible = j;
+      }
+      niveaux[cible].vitrages.push(v);
+      vitrees[cible] += Math.max(num(v.surface), 0);
+    });
+    return niveaux;
   }
 
   // Puissance nominale (totale, conditions EN 14511) couvrant le total ET la part sensible,
@@ -457,7 +526,10 @@
   function calculChantier(chantier) {
     var regimeEau = chantier.installation ? chantier.installation.regimeEau : undefined;
     var foyer = foyerChantier(chantier);
-    var pieces = (chantier.pieces || []).map(function (p) { return calculPiece(p, chantier.climat, regimeEau, foyer.n); });
+    var global = chantier.mode === 'global';
+    // Pièces calculées : celles du relevé, ou les niveaux virtuels du mode global.
+    var sources = global ? piecesGlobales(chantier.global, foyer.n) : (chantier.pieces || []);
+    var pieces = sources.map(function (p) { return calculPiece(p, chantier.climat, regimeEau, foyer.n); });
     var K = D.CLIM;
     var chauffage = 0;
     var sommePieces = 0;
@@ -500,6 +572,8 @@
     var latent = latentAir + part * occupantsLatent;
     var climatisation = puissanceNominale(sensible, latent) * majorationClim(chantier.climat || {});
     return {
+      mode: global ? 'global' : 'pieces',
+      sources: sources,
       pieces: pieces,
       chauffage: chauffage,
       // Puissance frigorifique nominale simultanée (groupe extérieur, PAC air/air, gainable).
@@ -561,6 +635,9 @@
     typesPiece: typesPiece,
     defautsPiece: defautsPiece,
     foyerChantier: foyerChantier,
+    niveauxGlobal: niveauxGlobal,
+    perimetreGlobal: perimetreGlobal,
+    piecesGlobales: piecesGlobales,
     puissanceNominale: puissanceNominale,
     vitragesPiece: vitragesPiece,
     calculPiece: calculPiece,
