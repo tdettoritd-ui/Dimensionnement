@@ -191,6 +191,8 @@
     /* --- Synthèse --- */
     var cartes = [
       { titre: 'Besoin de chauffage', valeur: F.kW(res.chauffage), detail: 'Palier PAC : ' + F.textePalierPac(res.palierChauffage), rgb: CHAUD },
+      { titre: 'Coefficient G estimé', valeur: F.nf(res.coefficientG, 2) + ' W/m³.K',
+        detail: 'GV ' + F.nf(res.deperditionsTotales) + ' W/K · ' + F.nf(res.volume) + ' m³', rgb: BLEU },
       { titre: 'Besoin de climatisation', valeur: F.kW(res.climatisation), detail: 'Palier clim : ' + F.textePalierPac(res.palierClimatisation), rgb: FROID }
     ];
     if (res.anah) {
@@ -205,7 +207,7 @@
       doc.roundedRect(x, y, lc, 20, 2, 2, 'S');
       police(doc, 8, false, GRIS);
       doc.text(t(ca.titre), x + 3, y + 5);
-      police(doc, 15, true, ca.rgb);
+      police(doc, cartes.length > 3 ? 13 : 15, true, ca.rgb);
       doc.text(t(ca.valeur), x + 3, y + 12);
       police(doc, 8.5, false, TEXTE);
       doc.text(t(ca.detail), x + 3, y + 17);

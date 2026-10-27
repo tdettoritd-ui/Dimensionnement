@@ -397,3 +397,15 @@ test('mode global : cohérent avec le calcul pièce par pièce du même logement
   assert.ok(Math.abs(global.chauffage / parPiece.chauffage - 1) < 0.05, 'chauffage à ±5 %');
   assert.ok(Math.abs(global.climatisation / parPiece.climatisation - 1) < 0.05, 'climatisation à ±5 %');
 });
+
+test('coefficient G estimé = déperditions totales / volume chauffé', () => {
+  const p = (L, l, lin) => ({ nom: 'Pièce', longueur: L, largeur: l, hauteur: '2,5', lineaire: lin, vitrages: [], debit: '' });
+  const r = C.calculChantier({ climat, prime: {}, pieces: [p('5', '4', '9'), p('4', '3', '4')] });
+  const gv = r.pieces[0].G + r.pieces[1].G;
+  proche(r.deperditionsTotales, gv);
+  proche(r.volume, (20 + 12) * 2.5);
+  proche(r.coefficientG, gv / 80);
+  // P = G × V × ΔT, avant surpuissance de relance.
+  proche(r.coefficientG * r.volume * 35, r.pieces[0].chauffageBase + r.pieces[1].chauffageBase);
+  assert.equal(C.calculChantier({ climat, prime: {}, pieces: [] }).coefficientG, 0);
+});

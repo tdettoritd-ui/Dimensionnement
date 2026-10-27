@@ -54,6 +54,8 @@ Par pièce :
 - Chauffage = `max(G × (T confort hiver − T base hiver), 0) × (1 + surpuissance de relance %)` (10 % par défaut, réglable dans « Climat »)
 - Climatisation : voir « Climatisation » ci-dessous.
 
+**Coefficient G estimé** (compte rendu, écran, email) : `G = GV / V` en W/m³.K, avec GV = somme des déperditions des pièces (W/K, renouvellement d'air et ponts thermiques compris) et V = volume chauffé ; la puissance de base vaut `G × V × ΔT` (avant surpuissance de relance).
+
 Totaux : chauffage = somme des pièces ; climatisation = besoin simultané de la maison (ci-dessous) ; palier PAC/clim = plus petit palier ≥ total (au-delà de 28 kW : étude multi-splits).
 
 **Climatisation** (révision octobre 2026 : l'ancien calcul ne comptait que la chaleur sensible « maison entière » et donnait environ 2 fois moins que les logiciels de bilan). Par pièce, à la pointe de la pièce (choix du split), avec ΔT = T base été − T confort été (6 K par défaut) et δ = ΔT − 6 :

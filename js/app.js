@@ -406,6 +406,7 @@
       '<p class="hint">' + (state.mode === 'global'
         ? 'Logement saisi d\'un bloc : surface, hauteur, niveaux, périmètre et vitrages. Rapide, mais sans split ni radiateur par pièce.'
         : 'Chaque pièce est saisie : split et radiateur conseillés pièce par pièce.') + '</p>' +
+      '<p class="g-global" id="g-global"></p>' +
       '</div></div>';
   }
 
@@ -652,8 +653,9 @@
       '<tr><th>Vitrages</th><td>' + nf(d('vitrages'), 1) + '</td></tr>' +
       '<tr><th>Ponts thermiques (' + LIBELLES_ISOLATION[P.length ? P[0].pontsThermiques.isolation : 'iti'] + ')</th><td>' + nf(d('pontsThermiques'), 1) + '</td></tr>' +
       '<tr><th>Renouvellement d\'air</th><td>' + nf(d('air'), 1) + '</td></tr>' +
-      '<tr class="total"><th>G</th><td>' + nf(G, 1) + ' W/K</td></tr>' +
-      '<tr><th>Puissance de base (G × ΔT)</th><td>' + W(somme(P, function (r) { return r.chauffageBase; })) + '</td></tr>' +
+      '<tr class="total"><th>Déperditions GV</th><td>' + nf(G, 1) + ' W/K</td></tr>' +
+      '<tr class="total"><th>Coefficient G (GV / volume)</th><td>' + nf(res.coefficientG, 2) + ' W/m³.K</td></tr>' +
+      '<tr><th>Puissance de base (G × V × ΔT)</th><td>' + W(somme(P, function (r) { return r.chauffageBase; })) + '</td></tr>' +
       '<tr><th>Surpuissance de relance</th><td>+ ' + nf(P.length ? P[0].surpuissance : 0) + ' % = ' + W(res.chauffage) + '</td></tr>' +
       '<tr class="sep"><th colspan="2">Apports été, pointe des niveaux (W)</th></tr>' +
       '<tr><th>Soleil par les baies</th><td>' + nf(a('solaires')) + '</td></tr>' +
@@ -735,6 +737,10 @@
 
     var u = C.uEnveloppe(state.climat);
     setHTML('u-enveloppe', 'U mur ' + nf(u.mur, 2) + ' · U toiture ' + nf(u.toiture, 2) + ' · U plancher ' + nf(u.plancher, 2) + ' W/m².K');
+    setHTML('g-global', res.volume > 0
+      ? 'Coefficient G estimé : <strong>' + nf(res.coefficientG, 2) + ' W/m³.K</strong> · déperditions ' + nf(res.deperditionsTotales) +
+        ' W/K pour ' + nf(res.volume) + ' m³ chauffés'
+      : '');
     setHTML('nb-pieces', state.pieces.length + (state.pieces.length > 1 ? ' pièces' : ' pièce'));
 
     var anah = res.anah;

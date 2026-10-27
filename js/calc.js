@@ -532,6 +532,8 @@
     var pieces = sources.map(function (p) { return calculPiece(p, chantier.climat, regimeEau, foyer.n); });
     var K = D.CLIM;
     var chauffage = 0;
+    var deperditionsTotales = 0;
+    var volume = 0;
     var sommePieces = 0;
     var sommeSensible = 0;
     var equipements = 0;
@@ -545,6 +547,8 @@
     pieces.forEach(function (r) {
       var c = r.clim;
       chauffage += r.chauffage;
+      deperditionsTotales += r.G;
+      volume += r.volume;
       sommePieces += c.nominale;
       sommeSensible += c.sensible;
       equipements += c.apports.equipements;
@@ -576,6 +580,11 @@
       sources: sources,
       pieces: pieces,
       chauffage: chauffage,
+      // Bilan global : déperditions GV (W/K, air compris), volume chauffé (m³) et coefficient
+      // volumique G = GV / V (W/m³.K), tel que P = G × V × ΔT (avant surpuissance de relance).
+      deperditionsTotales: deperditionsTotales,
+      volume: volume,
+      coefficientG: volume > 0 ? deperditionsTotales / volume : 0,
       // Puissance frigorifique nominale simultanée (groupe extérieur, PAC air/air, gainable).
       climatisation: climatisation,
       climSensible: sensible,
