@@ -429,3 +429,13 @@ test('pièce saisie en m² : même résultat que longueur × largeur', () => {
   assert.equal(C.surfacePiece({ saisieSurface: 'surface', surface: '' }), 0);
   assert.equal(C.surfacePiece({ saisieSurface: 'surface', surface: '-3' }), 0);
 });
+
+test('climatisation : total simultané jamais inférieur à la plus grosse pièce', () => {
+  // Grande baie Est : la pièce culmine le matin, le créneau maison de 10 h ne la couvre pas.
+  const P = (nom, vit, toit) => ({ nom, longueur: '5', largeur: '4', hauteur: '2,5', lineaire: '9', sousToiture: toit, vitrages: vit, occupants: '', equipements: '', debit: '' });
+  const pieces = [P('Séjour', [{ orientation: 'E', type: 'double', surface: '8', volet: 'non' }], 'oui'),
+    P('Chambre 1', [{ orientation: 'N', type: 'double', surface: '1', volet: 'non' }], 'non')];
+  const r = C.calculChantier({ climat, prime: { personnes: '2' }, pieces });
+  proche(r.climatisation, Math.max(...r.pieces.map(x => x.climatisation)));
+  assert.ok(r.climatisation <= r.climSommePieces + 1e-9);
+});

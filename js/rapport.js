@@ -300,7 +300,10 @@
       head: [[global ? 'Niveau' : 'Pièce', 'Surface', 'Chauffage', 'Climatisation', 'Split', 'Radiateur neuf', 'Radiateur existant'].map(t)],
       body: lignesPieces,
       showFoot: 'lastPage',
-      foot: [[t('Total'), t(F.nf(surfaceTotale, 1) + ' m²'), t(F.kW(res.chauffage)), t(F.kW(res.climatisation) + ' *'), '', '', '']],
+      foot: [
+        [t('Total (somme)'), t(F.nf(surfaceTotale, 1) + ' m²'), t(F.kW(res.chauffage)), t(F.kW(res.climSommePieces)), '', '', ''],
+        [t('Climatisation simultanée (groupe extérieur)'), '', '', t(F.kW(res.climatisation) + ' *'), '', '', '']
+      ],
       styles: { font: 'helvetica', fontSize: 8.5, textColor: TEXTE, lineColor: FILET, lineWidth: 0.2, cellPadding: 1.5 },
       headStyles: { fillColor: BLEU, textColor: 255, fontStyle: 'bold' },
       footStyles: { fillColor: [238, 243, 247], textColor: TEXTE, fontStyle: 'bold' },
@@ -309,7 +312,7 @@
     y = doc.lastAutoTable.finalY + 4;
     police(doc, 7.5, false, GRIS);
     var noteClim = doc.splitTextToSize(t('* Climatisation : besoin simultané de la maison (pic à ' + res.climCreneau + ', heure d\'été ; ' +
-      'soleil et occupants non simultanés dans toutes les pièces), pour le groupe extérieur. Somme des pièces : ' + F.kW(res.climSommePieces) + ' (unités intérieures). ' +
+      'soleil et occupants non simultanés dans toutes les pièces), pour le groupe extérieur, au moins égal à la plus grosse pièce. La somme des pièces (' + F.kW(res.climSommePieces) + ') sert au choix des unités intérieures. ' +
       'Puissances frigorifiques nominales air/air, humidité (latent) comprise.'), UTILE);
     doc.text(noteClim, MARGE, y + 2);
     y += noteClim.length * 3.4 + 5;

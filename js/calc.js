@@ -542,6 +542,7 @@
     var volume = 0;
     var sommePieces = 0;
     var sommeSensible = 0;
+    var piecesMax = 0;
     var equipements = 0;
     var transmission = 0;
     var latentAir = 0;
@@ -557,6 +558,7 @@
       volume += r.volume;
       sommePieces += c.nominale;
       sommeSensible += c.sensible;
+      piecesMax = Math.max(piecesMax, c.nominale);
       equipements += c.apports.equipements;
       transmission += c.transmission;
       latentAir += c.apports.latentAir;
@@ -580,7 +582,9 @@
     });
     sensible = Math.min(sensible, sommeSensible);
     var latent = latentAir + part * occupantsLatent;
-    var climatisation = puissanceNominale(sensible, latent) * majorationClim(chantier.climat || {});
+    // Le groupe extérieur doit au moins alimenter la plus grosse unité intérieure à sa pointe
+    // (pièce par pièce seulement : les niveaux du mode global ne sont pas des unités intérieures).
+    var climatisation = Math.max(puissanceNominale(sensible, latent) * majorationClim(chantier.climat || {}), global ? 0 : piecesMax);
     return {
       mode: global ? 'global' : 'pieces',
       sources: sources,
