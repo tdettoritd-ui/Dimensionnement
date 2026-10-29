@@ -1032,8 +1032,23 @@
   window.Entreprise.initialiser();
   window.Envoi.initialiser();
 
+  // Mises à jour : vérifiées à chaque retour sur l'application (une application installée reste
+  // ouverte en arrière-plan) ; quand la nouvelle version prend la main, la page se recharge
+  // (le brouillon est conservé).
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
-    navigator.serviceWorker.register('sw.js').catch(function () { /* hors ligne non disponible */ });
+    var dejaControlee = !!navigator.serviceWorker.controller;
+    var rechargement = false;
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (!dejaControlee || rechargement) return;
+      rechargement = true;
+      ecrire(CLE_BROUILLON, state);
+      window.location.reload();
+    });
+    navigator.serviceWorker.register('sw.js').then(function (reg) {
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible') reg.update().catch(function () { /* hors ligne */ });
+      });
+    }).catch(function () { /* hors ligne non disponible */ });
   }
 
   render();
