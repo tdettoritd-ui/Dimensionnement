@@ -335,8 +335,8 @@
       var r = res.pieces[i];
       var vitrages = F.lignesVitrages(p, r);
       var lignes = [
-        ['Dimensions', p.virtuel
-          ? F.nf(r.surface, 1) + ' m² × ' + F.nf(C.num(p.hauteur), 2) + ' m · ' + F.nf(r.volume, 1) + ' m³'
+        ['Dimensions', p.virtuel || p.saisieSurface === 'surface'
+          ? F.nf(r.surface, 1) + ' m² × ' + (p.virtuel ? F.nf(C.num(p.hauteur), 2) : p.hauteur || '?') + ' m · ' + F.nf(r.volume, 1) + ' m³'
           : (p.longueur || '?') + ' × ' + (p.largeur || '?') + ' × ' + (p.hauteur || '?') + ' m · ' + F.nf(r.surface, 1) + ' m² · ' + F.nf(r.volume, 1) + ' m³'],
         ['Murs ext. exposés', (p.virtuel ? F.nf(C.num(p.lineaire), 1) + ' ml' : (F.avecUnite(p.lineaire, 'ml') || '—')) + ' · sous toiture : ' + F.texteOuiNon(p.sousToiture) +
           ' · sur plancher bas : ' + F.texteOuiNon(p.surPlancherBas)],

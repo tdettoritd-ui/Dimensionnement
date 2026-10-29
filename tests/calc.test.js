@@ -409,3 +409,23 @@ test('coefficient G estimé = déperditions totales / volume chauffé', () => {
   proche(r.coefficientG * r.volume * 35, r.pieces[0].chauffageBase + r.pieces[1].chauffageBase);
   assert.equal(C.calculChantier({ climat, prime: {}, pieces: [] }).coefficientG, 0);
 });
+
+test('pièce saisie en m² : même résultat que longueur × largeur', () => {
+  const base = { nom: 'Séjour', hauteur: '2,5', lineaire: '9', vitrages: [], debit: '', vitrageMode: 'rapide',
+    vitrageRapide: { niveau: 'moyen', orientation: 'S', type: 'double', volet: 'non' } };
+  const lxl = Object.assign({ longueur: '5', largeur: '4' }, base);
+  const m2 = Object.assign({ saisieSurface: 'surface', surface: '20', longueur: '9', largeur: '9' }, base);
+  assert.equal(C.surfacePiece(m2), 20);
+  assert.equal(C.surfacePiece(lxl), 20);
+  const a = C.calculPiece(lxl, climat);
+  const b = C.calculPiece(m2, climat);
+  proche(b.surface, 20);
+  proche(b.volume, 50);
+  proche(b.chauffage, a.chauffage);
+  proche(b.climatisation, a.climatisation);
+  proche(b.surfaceVitree, a.surfaceVitree);
+  proche(C.debitEstime(m2, climat), C.debitEstime(lxl, climat));
+  // Surface vide ou négative : pièce sans surface.
+  assert.equal(C.surfacePiece({ saisieSurface: 'surface', surface: '' }), 0);
+  assert.equal(C.surfacePiece({ saisieSurface: 'surface', surface: '-3' }), 0);
+});

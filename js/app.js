@@ -72,8 +72,10 @@
     return {
       uid: uid(),
       nom: 'Pièce ' + n,
+      saisieSurface: 'dimensions',
       longueur: '',
       largeur: '',
+      surface: '',
       hauteur: '2,5',
       lineaire: '',
       sousToiture: 'oui',
@@ -462,13 +464,17 @@
     var replie = ui.replie[p.uid];
     var corps = '';
     if (!replie) {
+      var parSurface = p.saisieSurface === 'surface';
       corps = '<div class="grid">' +
-        champ('Longueur', 'pieces.' + i + '.longueur', { kind: 'num', unite: 'm' }) +
-        champ('Largeur', 'pieces.' + i + '.largeur', { kind: 'num', unite: 'm' }) +
+        bascule('Saisie de la surface', 'pieces.' + i + '.saisieSurface', [['dimensions', 'Long. × larg.'], ['surface', 'Surface (m²)']], { obligatoire: true, cls: 'span-2' }) +
+        (parSurface
+          ? champ('Surface au sol', 'pieces.' + i + '.surface', { kind: 'num', unite: 'm²' })
+          : champ('Longueur', 'pieces.' + i + '.longueur', { kind: 'num', unite: 'm' }) +
+            champ('Largeur', 'pieces.' + i + '.largeur', { kind: 'num', unite: 'm' })) +
         champ('Hauteur', 'pieces.' + i + '.hauteur', { kind: 'num', unite: 'm' }) +
         champ('Murs ext. exposés', 'pieces.' + i + '.lineaire', {
           kind: 'num', unite: 'ml',
-          bouton: { action: 'auto-lineaire', label: '2×(L+l)', data: ' data-i="' + i + '"' },
+          bouton: { action: 'auto-lineaire', label: parSurface ? '4×√S' : '2×(L+l)', data: ' data-i="' + i + '"' },
           aide: '', aideId: 'lineaire-aide-' + p.uid
         }) +
         bascule('Pièce sous toiture ?', 'pieces.' + i + '.sousToiture', [['oui', 'Oui'], ['non', 'Non (étage interm.)']], { obligatoire: true, cls: 'span-2' }) +
@@ -814,6 +820,12 @@
       var path = bt.dataset.set;
       var v = bt.dataset.value;
       setPath(state, path, getPath(state, path) === v && bt.hasAttribute('data-clear') ? '' : v);
+      // Passage à la saisie en m² : reprend la surface longueur × largeur déjà saisie.
+      var m = /^pieces\.(\d+)\.saisieSurface$/.exec(path);
+      var pc = m && state.pieces[+m[1]];
+      if (pc && v === 'surface' && C.estVide(pc.surface) && C.num(pc.longueur) * C.num(pc.largeur) > 0) {
+        pc.surface = String(Math.round(C.num(pc.longueur) * C.num(pc.largeur) * 100) / 100).replace('.', ',');
+      }
       modification();
       render();
       return;
@@ -848,7 +860,11 @@
         getPath(state, bt.dataset.base).vitrages.splice(j, 1);
         break;
       case 'auto-lineaire':
-        p.lineaire = String(Math.round(2 * (C.num(p.longueur) + C.num(p.largeur)) * 100) / 100).replace('.', ',');
+        // En saisie par surface, périmètre d'une pièce carrée de même surface.
+        var perimetre = p.saisieSurface === 'surface'
+          ? 4 * Math.sqrt(C.surfacePiece(p))
+          : 2 * (C.num(p.longueur) + C.num(p.largeur));
+        p.lineaire = String(Math.round(perimetre * 100) / 100).replace('.', ',');
         break;
       case 'estimer-debit':
         p.debit = String(Math.round(C.debitEstime(p, state.climat) * 10) / 10).replace('.', ',');

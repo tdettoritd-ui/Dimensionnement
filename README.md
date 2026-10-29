@@ -47,7 +47,7 @@ Pour un usage terrain, héberger le dossier sur n'importe quel hébergement stat
 
 Par pièce :
 
-- `S = L × l` ; `Smur = max(linéaire ext. × H − Σ vitrages, 0)`
+- `S = L × l`, ou la surface au sol saisie directement en m² (bascule « Saisie de la surface » de chaque pièce ; le bouton du linéaire propose alors `4 × √S`, périmètre d'une pièce carrée) ; `Smur = max(linéaire ext. × H − Σ vitrages, 0)`
 - `U paroi = 1 / (R base + épaisseur(m) / λ)` ; toiture : U = 0 si la pièce n'est pas sous toiture ou si « Aucune » ; plancher : U = 0 si la pièce n'est pas sur plancher bas (étage) ou si « Aucun »
 - U vitrage = U du type − 0,2 si volet roulant, minimum 0,5 W/m².K
 - `G = U mur·Smur + U toit·S + U plancher·S + Σ U vitrage·surface + ponts thermiques + 0,34·débit`

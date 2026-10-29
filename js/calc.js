@@ -100,13 +100,19 @@
     return !!(o && o.toit);
   }
 
+  // Surface au sol de la pièce : saisie directe en m², ou longueur × largeur.
+  function surfacePiece(piece) {
+    if (piece.saisieSurface === 'surface') return Math.max(num(piece.surface), 0);
+    return num(piece.longueur) * num(piece.largeur);
+  }
+
   // Vitrages pris en compte : la liste détaillée, ou en saisie rapide un vitrage
   // équivalent dont la surface vaut ratio du niveau × surface au sol.
   function vitragesPiece(piece) {
     if (piece.vitrageMode !== 'rapide') return piece.vitrages || [];
     var g = piece.vitrageRapide || {};
     var niveau = D.find(D.NIVEAUX_VITRAGE, g.niveau);
-    var surfaceSol = num(piece.longueur) * num(piece.largeur);
+    var surfaceSol = surfacePiece(piece);
     return [{
       orientation: g.orientation,
       type: g.type,
@@ -117,7 +123,7 @@
 
   function debitEstime(piece, climat) {
     var v = D.find(D.VENTILATIONS, climat.ventilation);
-    var volume = num(piece.longueur) * num(piece.largeur) * num(piece.hauteur);
+    var volume = surfacePiece(piece) * num(piece.hauteur);
     return v ? volume * v.taux : 0;
   }
 
@@ -436,7 +442,7 @@
   // foyer (facultatif) : personnes du foyer, pour les occupants par défaut des pièces de vie.
   function calculPiece(piece, climat, regimeEau, foyer) {
     var u = uEnveloppe(climat);
-    var s = num(piece.longueur) * num(piece.largeur);
+    var s = surfacePiece(piece);
     var volume = s * num(piece.hauteur);
     var sousToiture = piece.sousToiture !== 'non';
     var uToiture = sousToiture ? u.toiture : 0;
@@ -648,6 +654,7 @@
     perimetreGlobal: perimetreGlobal,
     piecesGlobales: piecesGlobales,
     puissanceNominale: puissanceNominale,
+    surfacePiece: surfacePiece,
     vitragesPiece: vitragesPiece,
     calculPiece: calculPiece,
     calculChantier: calculChantier,
