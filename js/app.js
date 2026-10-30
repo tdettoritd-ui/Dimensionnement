@@ -112,9 +112,10 @@
     };
   }
 
-  function nouveauChantier(climat, mode) {
+  function nouveauChantier(climat, mode, systeme) {
     return {
       id: null,
+      systeme: systeme === 'air_air' ? 'air_air' : 'air_eau',
       mode: mode === 'global' ? 'global' : 'pieces',
       global: nouveauGlobal(),
       client: { nom: '', adresse: '', telephone: '', email: '', annee: '', date: aujourdhui(), generation: '' },
@@ -140,6 +141,7 @@
       out.climat[k] = Object.assign({ materiau: 'aucun', epaisseur: '' }, out.climat[k]);
     });
     out.mode = c.mode === 'global' ? 'global' : 'pieces';
+    out.systeme = C.systemeChantier(c);
     var g = c.global || {};
     out.global = Object.assign(nouveauGlobal(), g);
     out.global.vitrageRapide = Object.assign(nouveauGlobal().vitrageRapide, g.vitrageRapide);
@@ -326,7 +328,8 @@
   function renderInstallation() {
     var i = state.installation;
     var emplacement = bascule('ECS : intégré ou déporté ?', 'installation.ecsEmplacement', [['integre', 'Intégré'], ['deporte', 'Déporté']], { cls: 'span-2' });
-    return encart('installation', 'Installation', '',
+    // Air/air : ni circuit d'eau (régime, ballon tampon) ni production d'ECS.
+    var circuitEau = airAir() ? '' :
       '<div class="grid">' +
       liste('Régime d\'eau des radiateurs', 'installation.regimeEau', table2options(D.REGIMES_EAU), { cls: 'span-2' }) +
       '</div>' +
@@ -337,6 +340,10 @@
       bascule('ECS produite par la PAC ?', 'installation.ecsPac') +
       (i.ecsPac === 'non' ? bascule('Ballon thermodynamique ?', 'installation.ballonThermo') : '<div class="spacer"></div>') +
       (i.ecsPac === 'oui' || (i.ecsPac === 'non' && i.ballonThermo === 'oui') ? emplacement : '') +
+      '</div>';
+    return encart('installation', 'Installation', '',
+      circuitEau +
+      '<div class="grid">' +
       bascule('Installation électrique', 'installation.electrique', [['mono', 'Monophasé'], ['tri', 'Triphasé']], { cls: 'span-2' }) +
       bascule('Régulation connectée', 'installation.regulation') +
       bascule('Mini tableau électrique dédié', 'installation.miniTableau') +
@@ -400,14 +407,28 @@
           '<button type="button" class="btn small" data-action="ajouter-vitrage" data-base="' + cible + '">+ Ajouter un vitrage</button>');
   }
 
+  /* ---------- Type d'installation (début de parcours) ---------- */
+
+  function airAir() {
+    return state.systeme === 'air_air';
+  }
+
+  function renderSysteme() {
+    var s = D.find(D.SYSTEMES, state.systeme);
+    return '<div class="card mode-card"><div class="card-body">' +
+      bascule('Type d\'installation', 'systeme', D.SYSTEMES.map(function (x) { return [x.id, x.label]; }), { obligatoire: true }) +
+      '<p class="hint">' + esc(s ? s.detail : '') + '</p>' +
+      '</div></div>';
+  }
+
   /* ---------- Mode de dimensionnement ---------- */
 
   function renderMode() {
     return '<div class="card mode-card"><div class="card-body">' +
       bascule('Dimensionnement', 'mode', [['pieces', 'Pièce par pièce'], ['global', 'Global (volume total)']], { obligatoire: true }) +
       '<p class="hint">' + (state.mode === 'global'
-        ? 'Logement saisi d\'un bloc : surface, hauteur, niveaux, périmètre et vitrages. Rapide, mais sans split ni radiateur par pièce.'
-        : 'Chaque pièce est saisie : split et radiateur conseillés pièce par pièce.') + '</p>' +
+        ? 'Logement saisi d\'un bloc : surface, hauteur, niveaux, périmètre et vitrages. Rapide, mais sans split' + (airAir() ? '' : ' ni radiateur') + ' par pièce.'
+        : 'Chaque pièce est saisie : split' + (airAir() ? '' : ' et radiateur') + ' conseillés pièce par pièce.') + '</p>' +
       '<p class="g-global" id="g-global"></p>' +
       '</div></div>';
   }
@@ -495,8 +516,9 @@
         }) +
         '</div>' +
         '<div class="results" id="res-' + p.uid + '"></div>' +
-        '<h4 class="sub-title">Radiateur existant <span class="muted">(optionnel)</span></h4>' +
-        renderRadiateur(p, i);
+        (airAir() ? '' :
+          '<h4 class="sub-title">Radiateur existant <span class="muted">(optionnel)</span></h4>' +
+          renderRadiateur(p, i));
     }
     return '<section class="card piece" aria-label="' + esc(p.nom) + '">' +
       '<div class="piece-head">' +
@@ -522,7 +544,7 @@
     var y = window.scrollY;
 
     document.getElementById('app').innerHTML =
-      renderClient() + renderClimat() + renderInstallation() + renderPrime() + renderMode() +
+      renderSysteme() + renderClient() + renderClimat() + renderInstallation() + renderPrime() + renderMode() +
       (state.mode === 'global'
         ? renderGlobal()
         : '<div class="pieces-head"><h2>Pièces</h2><span class="muted" id="nb-pieces"></span></div>' +
@@ -559,9 +581,10 @@
       '<div class="kpi cool"><span>Climatisation</span><strong>' + kW(r.climatisation) + '</strong><small>' + W(r.climatisation) + ' nominal</small></div>' +
       '</div>' +
       '<div class="reco"><span>Split préconisé (unité intérieure)</span><strong>' + textePalierSplit(r.palierSplit) + '</strong></div>' +
-      '<div class="reco"><span>Radiateur neuf préconisé</span><strong>' + textePalierRadiateur(r.radiateurNeuf) + '</strong>' +
-      (r.facteurRegime !== 1 ? '<small class="reco-note">puissance catalogue ΔT50, pour un régime ' + F.esc(state.installation.regimeEau) + ' °C</small>' : '') +
-      '</div>' +
+      (airAir() ? '' :
+        '<div class="reco"><span>Radiateur neuf préconisé</span><strong>' + textePalierRadiateur(r.radiateurNeuf) + '</strong>' +
+        (r.facteurRegime !== 1 ? '<small class="reco-note">puissance catalogue ΔT50, pour un régime ' + F.esc(state.installation.regimeEau) + ' °C</small>' : '') +
+        '</div>') +
       '<details class="detail" data-key="detail"><summary>Détail du calcul</summary>' +
       '<table class="mini"><tbody>' +
       '<tr><th>Surface au sol</th><td>' + nf(r.surface, 2) + ' m²</td></tr>' +
@@ -644,7 +667,7 @@
       '<div class="kpi cool"><span>Climatisation</span><strong>' + kW(res.climatisation) + '</strong><small>pic ' + esc(res.climCreneau) + (surface > 0 ? ' · ' + nf(res.climatisation / surface) + ' W/m²' : '') + '</small></div>' +
       '</div>' +
       '<div class="reco"><span>Paliers PAC / groupe extérieur</span><strong>' + F.textePalierPac(res.palierChauffage) + ' · ' + F.textePalierPac(res.palierClimatisation) + '</strong>' +
-      '<small class="reco-note">chauffage · climatisation ; pour les splits et radiateurs pièce par pièce, passer en mode « Pièce par pièce ».</small></div>' +
+      '<small class="reco-note">chauffage · climatisation ; pour les splits' + (airAir() ? '' : ' et radiateurs') + ' pièce par pièce, passer en mode « Pièce par pièce ».</small></div>' +
       parNiveau +
       '<details class="detail" data-key="detail"><summary>Détail du calcul</summary>' +
       '<table class="mini"><tbody>' +
@@ -918,7 +941,7 @@
           '<button type="button" class="chantier-load" data-load="' + esc(c.id) + '">' +
           '<strong>' + esc(cl.nom || 'Sans nom') + '</strong>' +
           '<span class="muted small">' + esc(dateFr(cl.date)) + (cl.adresse ? ' · ' + esc(cl.adresse) : '') + '</span>' +
-          '<span class="small">' + kW(res.chauffage) + ' chauffage · ' + kW(res.climatisation) + ' clim</span>' +
+          '<span class="small">' + esc(F.libelle(D.SYSTEMES, res.systeme)) + ' · ' + kW(res.chauffage) + ' chauffage · ' + kW(res.climatisation) + ' clim</span>' +
           '</button>' +
           '<button type="button" class="btn ghost icon-btn danger" data-delete="' + esc(c.id) + '" aria-label="Supprimer ce chantier">' +
           '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>' +
@@ -963,7 +986,7 @@
   function nouveauReleve() {
     if (!confirm('Démarrer un nouveau relevé ?\nClient, installation, prime et pièces seront réinitialisés (les réglages climat / enveloppe sont conservés).' +
       (modifie ? '\n\nAttention : des modifications ne sont pas sauvegardées.' : ''))) return;
-    state = nouveauChantier(JSON.parse(JSON.stringify(state.climat)), state.mode);
+    state = nouveauChantier(JSON.parse(JSON.stringify(state.climat)), state.mode, state.systeme);
     modifie = false;
     ui.replie = {};
     ui.detail = {};

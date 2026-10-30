@@ -529,12 +529,20 @@
     };
   }
 
+  // Type d'installation : 'air_eau' (défaut, relevés antérieurs) ou 'air_air'.
+  function systemeChantier(chantier) {
+    return chantier && chantier.systeme === 'air_air' ? 'air_air' : 'air_eau';
+  }
+
   function calculChantier(chantier) {
-    var regimeEau = chantier.installation ? chantier.installation.regimeEau : undefined;
+    var airAir = systemeChantier(chantier) === 'air_air';
+    // Air/air : pas de circuit d'eau, les radiateurs relevés sont ignorés.
+    var regimeEau = !airAir && chantier.installation ? chantier.installation.regimeEau : undefined;
     var foyer = foyerChantier(chantier);
     var global = chantier.mode === 'global';
     // Pièces calculées : celles du relevé, ou les niveaux virtuels du mode global.
     var sources = global ? piecesGlobales(chantier.global, foyer.n) : (chantier.pieces || []);
+    if (airAir) sources = sources.map(function (p) { return Object.assign({}, p, { radiateur: null }); });
     var pieces = sources.map(function (p) { return calculPiece(p, chantier.climat, regimeEau, foyer.n); });
     var K = D.CLIM;
     var chauffage = 0;
@@ -587,6 +595,7 @@
     var climatisation = Math.max(puissanceNominale(sensible, latent) * majorationClim(chantier.climat || {}), global ? 0 : piecesMax);
     return {
       mode: global ? 'global' : 'pieces',
+      systeme: airAir ? 'air_air' : 'air_eau',
       sources: sources,
       pieces: pieces,
       chauffage: chauffage,
@@ -662,6 +671,7 @@
     vitragesPiece: vitragesPiece,
     calculPiece: calculPiece,
     calculChantier: calculChantier,
+    systemeChantier: systemeChantier,
     seuilsAnah: seuilsAnah,
     categorieAnah: categorieAnah
   };

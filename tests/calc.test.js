@@ -439,3 +439,19 @@ test('climatisation : total simultané jamais inférieur à la plus grosse pièc
   proche(r.climatisation, Math.max(...r.pieces.map(x => x.climatisation)));
   assert.ok(r.climatisation <= r.climSommePieces + 1e-9);
 });
+
+test('type d\'installation : air/eau par défaut, air/air sans radiateur ni régime d\'eau', () => {
+  const piece = { nom: 'Séjour', longueur: '5', largeur: '4', hauteur: '2,5', lineaire: '9', sousToiture: 'oui', vitrages: [], occupants: '', equipements: '', debit: '',
+    radiateur: { materiau: 'acier', typeAcier: '22', hauteur: '60', longueur: '100' } };
+  const base = { climat, prime: { personnes: '2' }, installation: { regimeEau: '45/35' }, pieces: [piece] };
+  const eau = C.calculChantier(base);
+  const air = C.calculChantier({ ...base, systeme: 'air_air' });
+  assert.equal(C.systemeChantier({}), 'air_eau');
+  assert.equal(eau.systeme, 'air_eau');
+  assert.equal(air.systeme, 'air_air');
+  assert.ok(eau.pieces[0].radiateurExistant);
+  assert.equal(air.pieces[0].radiateurExistant, null);
+  // Mêmes besoins : seul l'émetteur change.
+  proche(air.chauffage, eau.chauffage);
+  proche(air.climatisation, eau.climatisation);
+});

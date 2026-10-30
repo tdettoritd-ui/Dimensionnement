@@ -188,6 +188,12 @@
     majorationDefaut: 0    // % ajouté à la puissance nominale (pièces et total) si « Majoration clim » est vide
   };
 
+  // Type d'installation choisi en début de relevé.
+  var SYSTEMES = [
+    { id: 'air_eau', label: 'PAC air/eau', detail: 'Radiateurs ou plancher chauffant, ECS' },
+    { id: 'air_air', label: 'PAC air/air', detail: 'Splits, gainable : ni radiateur ni circuit d\'eau' }
+  ];
+
   // Puissances nominales courantes des unités intérieures murales (kW) : choix du split par pièce.
   var PALIERS_SPLIT = [1.5, 2, 2.5, 3.5, 4.2, 5, 6, 7.1];
 
@@ -300,6 +306,7 @@
     ETD_MURS: ETD_MURS,
     TYPES_PIECE: TYPES_PIECE,
     CLIM: CLIM,
+    SYSTEMES: SYSTEMES,
     PALIERS_RADIATEUR: PALIERS_RADIATEUR,
     RADIATEURS_ACIER: RADIATEURS_ACIER,
     RADIATEURS_ELEMENTS: RADIATEURS_ELEMENTS,

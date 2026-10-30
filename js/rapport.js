@@ -90,6 +90,7 @@
     var c = state.client;
     var k = state.climat;
     var ins = state.installation;
+    var airAir = res.systeme === 'air_air';
     var y = MARGE;
 
     function page() { return doc.getCurrentPageInfo().pageNumber; }
@@ -177,7 +178,7 @@
     doc.line(MARGE, y, LARG - MARGE, y);
     y += 7;
     police(doc, 15, true, BLEU);
-    doc.text(t('Relevé technique – Pompe à chaleur / Climatisation'), MARGE, y);
+    doc.text(t(airAir ? 'Relevé technique – PAC air/air / Climatisation' : 'Relevé technique – PAC air/eau'), MARGE, y);
     y += 6;
     police(doc, 9.5, false, TEXTE);
     var sousTitre = [
@@ -243,6 +244,7 @@
         ['Ventilation', F.libelle(D.VENTILATIONS, k.ventilation)]
       ]],
       ['Installation', [
+        ['Type d\'installation', F.libelle(D.SYSTEMES, res.systeme)],
         ['Ballon tampon', F.texteOuiNon(ins.ballonTampon) + (ins.ballonTampon === 'oui' && ins.volumeTampon ? ' – ' + ins.volumeTampon + ' L' : '')],
         ['ECS', F.texteEcs(ins)],
         ['Électricité', ins.electrique === 'mono' ? 'Monophasé' : ins.electrique === 'tri' ? 'Triphasé' : ''],
@@ -253,7 +255,7 @@
         ['Distance UI ↔ tableau', F.avecUnite(ins.distUiTableau, 'm')],
         ['Condensats à proximité', F.texteOuiNon(ins.condensats)],
         ['Régime d\'eau radiateurs', ins.regimeEau ? F.libelle(D.REGIMES_EAU, ins.regimeEau) : '']
-      ]]
+      ].filter(function (l) { return !(airAir && /^(Ballon tampon|ECS|Régime)/.test(l[0])); })]
     );
 
     // Pièces calculées : celles du relevé, ou les niveaux du mode global (logement saisi d'un bloc).
@@ -283,6 +285,8 @@
     police(doc, 10.5, true, BLEU);
     doc.text(t(global ? 'Synthèse par niveau' : 'Synthèse par pièce'), MARGE, y + 4);
     var surfaceTotale = 0;
+    // Air/air : pas de colonnes radiateur.
+    var colonnes = airAir ? 5 : 7;
     var lignesPieces = sources.map(function (p, i) {
       var r = res.pieces[i];
       surfaceTotale += r.surface;
@@ -291,18 +295,18 @@
         t(p.nom), t(F.nf(r.surface, 1) + ' m²'), t(F.W(r.chauffage)), t(F.W(r.climatisation)),
         t(global ? '—' : F.textePalierSplit(r.palierSplit)), t(global ? '—' : F.textePalierRadiateur(r.radiateurNeuf)),
         t(ex ? F.W(ex.puissance) + (ex.suffisant ? ' – suffisant' : ' – insuffisant') : '—')
-      ];
+      ].slice(0, colonnes);
     });
     doc.autoTable({
       startY: y + 6,
       margin: { left: MARGE, right: MARGE, top: MARGE, bottom: BAS },
       theme: 'grid',
-      head: [[global ? 'Niveau' : 'Pièce', 'Surface', 'Chauffage', 'Climatisation', 'Split', 'Radiateur neuf', 'Radiateur existant'].map(t)],
+      head: [[global ? 'Niveau' : 'Pièce', 'Surface', 'Chauffage', 'Climatisation', 'Split', 'Radiateur neuf', 'Radiateur existant'].slice(0, colonnes).map(t)],
       body: lignesPieces,
       showFoot: 'lastPage',
       foot: [
-        [t('Total (somme)'), t(F.nf(surfaceTotale, 1) + ' m²'), t(F.kW(res.chauffage)), t(F.kW(res.climSommePieces)), '', '', ''],
-        [t('Climatisation simultanée (groupe extérieur)'), '', '', t(F.kW(res.climatisation) + ' *'), '', '', '']
+        [t('Total (somme)'), t(F.nf(surfaceTotale, 1) + ' m²'), t(F.kW(res.chauffage)), t(F.kW(res.climSommePieces)), '', '', ''].slice(0, colonnes),
+        [t('Climatisation simultanée (groupe extérieur)'), '', '', t(F.kW(res.climatisation) + ' *'), '', '', ''].slice(0, colonnes)
       ],
       styles: { font: 'helvetica', fontSize: 8.5, textColor: TEXTE, lineColor: FILET, lineWidth: 0.2, cellPadding: 1.5 },
       headStyles: { fillColor: BLEU, textColor: 255, fontStyle: 'bold' },
@@ -354,7 +358,7 @@
         ['Radiateur neuf préconisé', F.textePalierRadiateur(r.radiateurNeuf) +
           (r.facteurRegime !== 1 && r.radiateurNeuf.valeur ? ' (catalogue ΔT50, régime ' + ins.regimeEau + ' °C)' : '')],
         ['Radiateur existant', F.texteRadiateurExistant(p, r, ins.regimeEau)]
-      ].filter(function (l) { return !(p.virtuel && /^Radiateur/.test(l[0])); })
+      ].filter(function (l) { return !((p.virtuel || airAir) && /^Radiateur/.test(l[0])); })
         .map(function (l) { return [t(l[0]), t(l[1])]; });
       var nom = t(p.nom);
       sautSiBesoin(Math.min(hauteurBloc(nom, lignes) * 1.1, HAUT - BAS - MARGE - 2));
@@ -377,7 +381,7 @@
 
     /* --- Mentions --- */
     var mentions = 'Dimensionnement indicatif établi par méthode simplifiée à partir des relevés effectués sur place. ' +
-      'Puissances des radiateurs existants : valeurs indicatives à ΔT50, à recouper avec la documentation du fabricant. ' +
+      (airAir ? '' : 'Puissances des radiateurs existants : valeurs indicatives à ΔT50, à recouper avec la documentation du fabricant. ') +
       'Plafonds Anah ' + D.ANAH.annee + ' : à vérifier lors du dépôt du dossier. Document établi le ' + new Date().toLocaleDateString('fr-FR') + '.';
     police(doc, 7.5, false, GRIS);
     var lignesMentions = doc.splitTextToSize(t(mentions), UTILE);

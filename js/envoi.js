@@ -36,6 +36,7 @@
       'Veuillez trouver ci-joint le relevé technique' + (c.date ? ' réalisé le ' + F.dateFr(c.date) : '') + '.',
       '',
       'Synthèse :',
+      '- Type d\'installation : ' + F.libelle(root.Data.SYSTEMES, res.systeme),
       '- Besoin de chauffage : ' + F.kW(res.chauffage) + ' (palier PAC conseillé : ' + F.textePalierPac(res.palierChauffage) + ')',
       '- Coefficient G estimé : ' + F.nf(res.coefficientG, 2) + ' W/m³.K (déperditions ' + F.nf(res.deperditionsTotales) + ' W/K pour ' + F.nf(res.volume) + ' m³ chauffés)',
       '- Besoin de climatisation : ' + F.kW(res.climatisation) + ' (palier conseillé : ' + F.textePalierPac(res.palierClimatisation) + ')'
