@@ -360,7 +360,8 @@
           ' nominal' + (p.virtuel ? '' : ' · split ' + F.textePalierSplit(r.palierSplit)) +
           ' (' + F.nf(r.clim.occupants) + ' occupant' + (r.clim.occupants > 1 ? 's' : '') + ', équipements ' + F.W(r.clim.equipements) + ')'],
         ['Déperditions G', F.nf(r.G, 2) + ' W/K (dont ponts thermiques ' + F.nf(r.deperditions.pontsThermiques, 2) + ') · base ' +
-          F.W(r.chauffageBase) + ' + relance ' + F.nf(r.surpuissance) + ' %'],
+          F.W(r.chauffageBase) + ' + relance ' + F.nf(r.surpuissance) + ' %' +
+          (r.tConfortAuto ? '' : ' · confort ' + F.nf(r.tConfortHiver, 1) + ' °C (propre à la pièce)')],
         ['Radiateur neuf préconisé', F.textePalierRadiateur(r.radiateurNeuf) +
           (r.facteurRegime !== 1 && r.radiateurNeuf.valeur ? ' (catalogue ΔT50, régime ' + ins.regimeEau + ' °C)' : '')],
         ['Radiateurs existants', F.texteRadiateurExistant(p, r, ins.regimeEau)]

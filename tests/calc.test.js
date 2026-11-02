@@ -509,3 +509,22 @@ test('murs exposés : linéaire calculé d\'après le nombre de murs, saisie pri
   assert.equal(auto.lineaireAuto, true);
   assert.equal(main.lineaireAuto, false);
 });
+
+test('confort hiver propre à une pièce : vide = celui du chantier', () => {
+  const p = { longueur: '4', largeur: '4', hauteur: '2,5', lineaire: '8', sousToiture: 'non', vitrages: [],
+    radiateurs: [{ materiau: 'fonte', hauteurElement: '600', elements: '10' }] };
+  const ref = C.calculPiece(p, climat, '45/35');
+  const meme = C.calculPiece({ ...p, tConfortHiver: '' }, climat, '45/35');
+  proche(meme.chauffage, ref.chauffage);
+  assert.equal(ref.tConfortAuto, true);
+  proche(ref.tConfortHiver, C.num(climat.tConfortHiver));
+  const sdb = C.calculPiece({ ...p, tConfortHiver: '24' }, climat, '45/35');
+  assert.equal(sdb.tConfortAuto, false);
+  const dt = (t) => t - C.num(climat.tBaseHiver);
+  proche(sdb.chauffageBase, ref.chauffageBase * dt(24) / dt(C.num(climat.tConfortHiver)));
+  // Radiateur : facteur de régime calculé à la température de la pièce.
+  proche(sdb.facteurRegime, C.facteurRegime('45/35', '24'));
+  // Le total chantier additionne les pièces.
+  const tot = C.calculChantier({ climat, prime: {}, pieces: [p, { ...p, tConfortHiver: '24' }] });
+  proche(tot.chauffage, ref.chauffage + sdb.chauffage);
+});

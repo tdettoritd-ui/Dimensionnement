@@ -78,6 +78,7 @@
       largeur: '',
       surface: '',
       hauteur: '2,5',
+      tConfortHiver: '',
       mursExposes: '',
       lineaire: '',
       sousToiture: 'oui',
@@ -516,6 +517,7 @@
           : champ('Longueur', 'pieces.' + i + '.longueur', { kind: 'num', unite: 'm' }) +
             champ('Largeur', 'pieces.' + i + '.largeur', { kind: 'num', unite: 'm' })) +
         champ('Hauteur', 'pieces.' + i + '.hauteur', { kind: 'num', unite: 'm' }) +
+        champ('Confort hiver', 'pieces.' + i + '.tConfortHiver', { kind: 'num', unite: '°C' }) +
         bascule('Murs extérieurs exposés', 'pieces.' + i + '.mursExposes', [['0', '0'], ['1', '1'], ['2', '2'], ['3', '3'], ['4', '4']], { cls: 'span-2' }) +
         champ('Linéaire de murs ext.', 'pieces.' + i + '.lineaire', {
           kind: 'num', unite: 'ml', cls: 'span-2',
@@ -624,6 +626,7 @@
       '<tr><th>Ponts thermiques (' + LIBELLES_ISOLATION[r.pontsThermiques.isolation] + ')</th><td>' + nf(d.pontsThermiques, 2) + '</td></tr>' +
       '<tr><th>Renouvellement d\'air</th><td>' + nf(d.air, 2) + '</td></tr>' +
       '<tr class="total"><th>G</th><td>' + nf(r.G, 2) + ' W/K</td></tr>' +
+      '<tr><th>Confort hiver' + (r.tConfortAuto ? ' (chantier)' : ' (pièce)') + '</th><td>' + nf(r.tConfortHiver, 1) + ' °C</td></tr>' +
       '<tr><th>Puissance de base (G × ΔT)</th><td>' + W(r.chauffageBase) + '</td></tr>' +
       '<tr><th>Surpuissance de relance</th><td>+ ' + nf(r.surpuissance) + ' % = ' + W(r.chauffage) + '</td></tr>' +
       '<tr class="sep"><th colspan="2">Apports été, pointe de la pièce (W)</th></tr>' +
@@ -778,6 +781,8 @@
         : '');
       var input = document.querySelector('[data-bind="pieces.' + i + '.debit"]');
       if (input) input.placeholder = 'auto : ' + nf(r.debitEstime, 1);
+      var champConfort = document.querySelector('[data-bind="pieces.' + i + '.tConfortHiver"]');
+      if (champConfort) champConfort.placeholder = 'auto : ' + nf(C.num(state.climat.tConfortHiver), 1);
       var champOcc = document.querySelector('[data-bind="pieces.' + i + '.occupants"]');
       if (champOcc) champOcc.placeholder = 'auto : ' + nf(r.clim.occupants);
       var champEquip = document.querySelector('[data-bind="pieces.' + i + '.equipements"]');

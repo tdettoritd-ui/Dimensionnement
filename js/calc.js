@@ -526,7 +526,10 @@
     };
     var G = deperditions.murs + deperditions.toiture + deperditions.plancher +
       deperditions.vitrages + deperditions.pontsThermiques + deperditions.air;
-    var deltaHiver = num(climat.tConfortHiver) - num(climat.tBaseHiver);
+    // Confort hiver de la pièce : sa saisie, sinon celle du chantier.
+    var confortAuto = estVide(piece.tConfortHiver);
+    var tConfort = confortAuto ? climat.tConfortHiver : piece.tConfortHiver;
+    var deltaHiver = num(tConfort) - num(climat.tBaseHiver);
     var chauffageBase = Math.max(G * deltaHiver, 0);
     // Surpuissance de relance (% de la puissance de base), après abaissement de nuit ou absence.
     var surpuissance = Math.max(num(climat.surpuissance), 0);
@@ -538,7 +541,7 @@
     });
 
     // Radiateurs : puissances catalogue (ΔT50) ramenées au régime d'eau de l'installation.
-    var facteur = facteurRegime(regimeEau, climat.tConfortHiver);
+    var facteur = facteurRegime(regimeEau, tConfort);
     // Plusieurs radiateurs dans la pièce : leurs puissances s'additionnent.
     var detailRadiateurs = [];
     var existant = null;
@@ -576,6 +579,8 @@
       deperditions: deperditions,
       pontsThermiques: pt,
       G: G,
+      tConfortHiver: num(tConfort),
+      tConfortAuto: confortAuto,
       chauffageBase: chauffageBase,
       surpuissance: surpuissance,
       chauffage: chauffage,
