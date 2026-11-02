@@ -57,7 +57,8 @@
       surpuissance: '10',
       majorationClim: '',
       murType: 'parpaing',
-      plancherType: 'dalle',
+      plancherDalle: 'beton',
+      plancherLocal: 'terre_plein',
       toitureType: 'combles',
       isolantMur: { materiau: 'aucun', epaisseur: '' },
       isolantPlancher: { materiau: 'aucun', epaisseur: '' },
@@ -141,6 +142,10 @@
     var out = Object.assign({}, base, c);
     ['client', 'installation', 'prime'].forEach(function (k) { out[k] = Object.assign({}, base[k], c[k]); });
     out.climat = Object.assign(climatDefaut(), c.climat);
+    // Relevés antérieurs : ancien choix unique du plancher bas.
+    var ancien = c.climat && D.PLANCHERS_ANCIENS[c.climat.plancherType];
+    if (ancien && !c.climat.plancherDalle) { out.climat.plancherDalle = ancien[0]; out.climat.plancherLocal = ancien[1]; }
+    delete out.climat.plancherType;
     ['isolantMur', 'isolantPlancher', 'isolantToiture'].forEach(function (k) {
       out.climat[k] = Object.assign({ materiau: 'aucun', epaisseur: '' }, out.climat[k]);
     });
@@ -318,8 +323,9 @@
         : '') +
       '</div>' +
       '<h3 class="sub-title">Plancher bas</h3><div class="grid">' +
-      liste('Plancher bas', 'climat.plancherType', D.PLANCHERS.map(function (m) { return { value: m.id, label: m.label + (m.r ? ' – R ' + nf(m.r, 2) : '') }; }), { cls: 'span-2' }) +
-      (c.plancherType !== 'aucun' ? isolant('plancher', 'isolantPlancher') : '') +
+      liste('Type de dalle', 'climat.plancherDalle', table2options(D.PLANCHERS_DALLE), { cls: 'span-2' }) +
+      liste('Type de cave', 'climat.plancherLocal', table2options(D.PLANCHERS_LOCAL), { cls: 'span-2' }) +
+      (c.plancherLocal !== 'cave_chauffee' ? isolant('plancher', 'isolantPlancher') : '') +
       bascule('Planchers entre étages', 'climat.plancherEtage', D.PLANCHERS_ETAGE.map(function (p) { return [p.id, p.label]; }), { obligatoire: true, cls: 'span-2' }) +
       '</div>' +
       '<h3 class="sub-title">Toiture / plafond</h3><div class="grid">' +

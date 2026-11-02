@@ -39,14 +39,35 @@
     return r > 0 ? 1 / r : 0;
   }
 
+  // Plancher bas : { dalle, local } d'après la saisie, ou l'ancien choix unique (plancherType).
+  function plancherBas(climat) {
+    var ancien = D.PLANCHERS_ANCIENS[climat.plancherType] || D.PLANCHERS_ANCIENS.dalle;
+    return {
+      dalle: D.find(D.PLANCHERS_DALLE, climat.plancherDalle) || D.find(D.PLANCHERS_DALLE, ancien[0]),
+      local: D.find(D.PLANCHERS_LOCAL, climat.plancherLocal) || D.find(D.PLANCHERS_LOCAL, ancien[1])
+    };
+  }
+
+  // Coefficient appliqué aux déperditions du plancher bas : b du local dessous (1 sur terre-plein).
+  function bPlancher(climat) {
+    var local = plancherBas(climat).local;
+    return local.rSol != null ? 1 : local.b;
+  }
+
+  function uPlancher(climat) {
+    var p = plancherBas(climat);
+    var r = p.dalle.r + rIsolant(climat.isolantPlancher);
+    if (p.local.rSol != null) return 1 / (r + p.local.rSol);
+    return p.local.b / (r + D.R_SE_LOCAL);
+  }
+
   function uEnveloppe(climat) {
     var mur = D.find(D.MURS, climat.murType);
     var toit = D.find(D.TOITURES, climat.toitureType);
-    var plancher = D.find(D.PLANCHERS, climat.plancherType);
     return {
       mur: mur ? uParoi(mur.r, climat.isolantMur) : 0,
       toiture: toit ? uParoi(toit.r, climat.isolantToiture) : 0,
-      plancher: plancher ? uParoi(plancher.r, climat.isolantPlancher) : 0
+      plancher: uPlancher(climat)
     };
   }
 
@@ -194,7 +215,8 @@
     var T = D.PONTS_THERMIQUES;
     var iso = isolationMur(climat);
     var mur = D.find(D.MURS, climat.murType) || {};
-    var plancher = D.find(D.PLANCHERS, climat.plancherType);
+    var plancher = plancherBas(climat);
+    var b = bPlancher(climat);
     var toit = D.find(D.TOITURES, climat.toitureType);
     var L = Math.max(num(piece.lineaire), 0);
     var H = Math.max(num(piece.hauteur), 0);
@@ -202,10 +224,11 @@
     var d = { plancherBas: 0, plancherHaut: 0, plancherIntermediaire: 0, refend: 0, menuiserie: 0 };
     if (L > 0) {
       // Sol : plancher bas lourd, sinon plancher d'étage (moitié comptée de chaque côté).
-      if (piece.surPlancherBas !== 'non' && plancher && plancher.r !== null) {
-        if (!mur.bois && !plancher.leger) {
+      // Sur cave chauffée, le plancher bas se comporte comme un plancher d'étage.
+      if (piece.surPlancherBas !== 'non' && b > 0) {
+        if (!mur.bois && !plancher.dalle.leger) {
           l.plancherBas = L;
-          d.plancherBas = T.plancherBas[iso][rIsolant(climat.isolantPlancher) > 0 ? 1 : 0] * L;
+          d.plancherBas = T.plancherBas[iso][rIsolant(climat.isolantPlancher) > 0 ? 1 : 0] * L * b;
         }
       } else {
         l.plancherIntermediaire += 0.5 * L;
@@ -662,6 +685,7 @@
     rIsolant: rIsolant,
     uParoi: uParoi,
     uEnveloppe: uEnveloppe,
+    plancherBas: plancherBas,
     uVitrage: uVitrage,
     debitEstime: debitEstime,
     palier: palier,

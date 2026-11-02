@@ -238,7 +238,11 @@
         ['Majoration clim', (C.estVide(k.majorationClim) ? '0' : k.majorationClim) + ' %'],
         ['Murs', F.libelle(D.MURS, k.murType) + ' + ' + F.isolantTexte(k.isolantMur) + ' (U ' + F.nf(u.mur, 2) + ')' +
           ' – ponts thermiques : ' + F.LIBELLES_ISOLATION[C.isolationMur(k)]],
-        ['Plancher bas', F.libelle(D.PLANCHERS, k.plancherType) + (k.plancherType !== 'aucun' ? ' + ' + F.isolantTexte(k.isolantPlancher) : '') + ' (U ' + F.nf(u.plancher, 2) + ')'],
+        ['Plancher bas', (function () {
+          var pb = C.plancherBas(k);
+          return 'Dalle ' + pb.dalle.label.toLowerCase() + ' – ' + pb.local.label +
+            (pb.local.id !== 'cave_chauffee' ? ' + ' + F.isolantTexte(k.isolantPlancher) : '') + ' (U ' + F.nf(u.plancher, 2) + ')';
+        })()],
         ['Planchers entre étages', F.libelle(D.PLANCHERS_ETAGE, k.plancherEtage || 'lourd')],
         ['Toiture', F.libelle(D.TOITURES, k.toitureType) + (k.toitureType !== 'aucune' ? ' + ' + F.isolantTexte(k.isolantToiture) : '') + ' (U ' + F.nf(u.toiture, 2) + ')'],
         ['Ventilation', F.libelle(D.VENTILATIONS, k.ventilation)]

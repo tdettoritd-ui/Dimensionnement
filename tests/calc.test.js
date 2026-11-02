@@ -25,7 +25,7 @@ const climat = {
 
 const uMur = 1 / (R(D.MURS, 'parpaing') + 0.10 / lambda('laine_verre'));
 const uToit = 1 / (R(D.TOITURES, 'combles') + 0.20 / lambda('laine_roche'));
-const uPlancher = 1 / R(D.PLANCHERS, 'dalle');
+const uPlancher = 1 / (R(D.PLANCHERS_DALLE, 'beton') + D.find(D.PLANCHERS_LOCAL, 'terre_plein').rSol);
 
 test('num accepte virgule, espaces et vide', () => {
   assert.equal(C.num('2,5'), 2.5);
@@ -179,7 +179,7 @@ test('orientation mixte = moyenne des orientations', () => {
 
 test('cohérence des tables de référence', () => {
   const ids = (t) => t.map(e => e.id);
-  [D.ZONES, D.MURS, D.TOITURES, D.PLANCHERS, D.ISOLANTS, D.VITRAGES, D.ORIENTATIONS, D.ACTIVITES,
+  [D.ZONES, D.MURS, D.TOITURES, D.PLANCHERS_DALLE, D.PLANCHERS_LOCAL, D.ISOLANTS, D.VITRAGES, D.ORIENTATIONS, D.ACTIVITES,
     D.VENTILATIONS, D.RADIATEURS_ACIER, D.NIVEAUX_VITRAGE].forEach(t => {
     assert.equal(new Set(ids(t)).size, t.length, 'identifiants en double');
   });
@@ -469,4 +469,27 @@ test('plusieurs radiateurs existants dans une pièce : puissances additionnées'
   assert.equal(C.calculPiece({ ...piece, radiateurs: [] }, climat).radiateurExistant, null);
   // Relevés antérieurs : un seul radiateur.
   proche(C.calculPiece({ ...piece, radiateurs: undefined, radiateur: r1 }, climat).radiateurExistant.puissanceCatalogue, C.radiateurExistant(r1));
+});
+
+test('plancher bas : type de dalle et local dessous (b), relevés antérieurs repris', () => {
+  const k = (dalle, local, iso) => ({ ...climat, plancherDalle: dalle, plancherLocal: local, isolantPlancher: iso || { materiau: 'aucun', epaisseur: '' } });
+  const rD = (id) => R(D.PLANCHERS_DALLE, id);
+  const b = (id) => D.find(D.PLANCHERS_LOCAL, id).b;
+  proche(C.uEnveloppe(k('beton', 'terre_plein')).plancher, 1 / (rD('beton') + 1.75));
+  proche(C.uEnveloppe(k('machefer', 'cave_enterree')).plancher, b('cave_enterree') / (rD('machefer') + D.R_SE_LOCAL));
+  proche(C.uEnveloppe(k('bois', 'vide_sanitaire', { materiau: 'laine_verre', epaisseur: '10' })).plancher,
+    b('vide_sanitaire') / (rD('bois') + 0.10 / lambda('laine_verre') + D.R_SE_LOCAL));
+  assert.equal(C.uEnveloppe(k('beton', 'cave_chauffee')).plancher, 0);
+  // Cave plus ventilée : plus de déperditions.
+  const u = (l) => C.uEnveloppe(k('beton', l)).plancher;
+  assert.ok(u('cave_enterree') < u('cave_semi') && u('cave_semi') < u('sous_sol_ventile'));
+  // Pont thermique du plancher bas réduit par b ; nul sur cave chauffée ou dalle bois.
+  const piece = { longueur: '4', largeur: '4', hauteur: '2,5', lineaire: '8', sousToiture: 'non', vitrages: [] };
+  const pt = (c) => C.calculPiece(piece, c).pontsThermiques.detail.plancherBas;
+  proche(pt(k('beton', 'cave_enterree')), b('cave_enterree') * pt(k('beton', 'terre_plein')));
+  assert.equal(pt(k('beton', 'cave_chauffee')), 0);
+  assert.equal(pt(k('bois', 'terre_plein')), 0);
+  // Ancien choix unique (plancherType) : correspondance dalle + dessous.
+  const ancien = { ...climat, plancherType: 'bois_vs' };
+  proche(C.uEnveloppe(ancien).plancher, C.uEnveloppe(k('bois', 'vide_sanitaire')).plancher);
 });

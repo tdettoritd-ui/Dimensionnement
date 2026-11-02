@@ -53,13 +53,36 @@
   // Valeurs « équivalentes » : le calcul applique l'écart de température extérieur complet, alors
   // que le sol (terre-plein) ou un local non chauffé (cave, vide sanitaire) est moins froid.
   // Terre-plein : 1 / Ue des tables 3CL ; cave et vide sanitaire : R0 / b (b ≈ 0,6-0,8, EN 12831).
-  var PLANCHERS = [
-    { id: 'dalle', label: 'Dalle béton sur terre-plein', r: 2.0 },
-    { id: 'dalle_machefer', label: 'Dalle mâchefer sur terre-plein', r: 2.1 },
-    { id: 'bois_vs', label: 'Plancher bois / vide sanitaire', r: 0.8, leger: true },
-    { id: 'cave', label: 'Sur cave non chauffée', r: 0.8 },
-    { id: 'aucun', label: 'Aucun (étage intermédiaire)', r: null }
+  // Plancher bas = type de dalle + ce qu'il y a dessous.
+  // r : résistance de la dalle, résistance superficielle intérieure comprise (m².K/W).
+  var PLANCHERS_DALLE = [
+    { id: 'beton', label: 'Béton', r: 0.25 },
+    { id: 'bois', label: 'Bois', r: 0.45, leger: true },
+    { id: 'machefer', label: 'Mâchefer', r: 0.35 }
   ];
+
+  // Sous le plancher bas. Local non chauffé : U = b / (R dalle + R isolant + R_SE_LOCAL),
+  // b = coefficient de réduction des températures (EN 12831, valeurs forfaitaires).
+  // Terre-plein : la résistance du sol rSol remplace b (U ≈ 0,5 pour une dalle béton non isolée).
+  // Cave chauffée : pas de déperdition par le plancher.
+  var PLANCHERS_LOCAL = [
+    { id: 'cave_enterree', label: 'Cave enterrée, sans fenêtre ni porte extérieure', b: 0.5 },
+    { id: 'cave_semi', label: 'Cave semi-enterrée, avec soupiraux, fenêtres ou porte extérieure', b: 0.8 },
+    { id: 'sous_sol_ventile', label: 'Sous-sol avec porte de garage, ou très ventilé', b: 0.9 },
+    { id: 'vide_sanitaire', label: 'Vide sanitaire ventilé', b: 0.8 },
+    { id: 'terre_plein', label: 'Terre-plein', rSol: 1.75 },
+    { id: 'cave_chauffee', label: 'Sur cave chauffée', b: 0 }
+  ];
+  var R_SE_LOCAL = 0.17; // m².K/W : résistance superficielle côté local non chauffé
+
+  // Relevés antérieurs : ancien choix unique du plancher bas → dalle + dessous.
+  var PLANCHERS_ANCIENS = {
+    dalle: ['beton', 'terre_plein'],
+    dalle_machefer: ['machefer', 'terre_plein'],
+    bois_vs: ['bois', 'vide_sanitaire'],
+    cave: ['beton', 'cave_enterree'],
+    aucun: ['beton', 'cave_chauffee']
+  };
 
   // Position de l'isolant rapporté sur les murs : détermine les ponts thermiques.
   var POSITIONS_ISOLANT_MUR = [
@@ -289,7 +312,10 @@
     GENERATIONS: GENERATIONS,
     MURS: MURS,
     TOITURES: TOITURES,
-    PLANCHERS: PLANCHERS,
+    PLANCHERS_DALLE: PLANCHERS_DALLE,
+    PLANCHERS_LOCAL: PLANCHERS_LOCAL,
+    R_SE_LOCAL: R_SE_LOCAL,
+    PLANCHERS_ANCIENS: PLANCHERS_ANCIENS,
     ISOLANTS: ISOLANTS,
     POSITIONS_ISOLANT_MUR: POSITIONS_ISOLANT_MUR,
     PLANCHERS_ETAGE: PLANCHERS_ETAGE,
