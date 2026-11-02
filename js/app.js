@@ -87,8 +87,12 @@
       activite: 'sedentaire',
       equipements: '',
       debit: '',
-      radiateur: { materiau: '', typeAcier: '22', hauteur: '', longueur: '', hauteurElement: '600', elements: '' }
+      radiateurs: []
     };
+  }
+
+  function nouveauRadiateur() {
+    return { uid: uid(), materiau: 'acier', typeAcier: '22', hauteur: '', longueur: '', hauteurElement: '600', elements: '' };
   }
 
   function nouveauVitrage() {
@@ -148,7 +152,10 @@
     out.global.vitrages = (g.vitrages || []).map(function (v) { return Object.assign(nouveauVitrage(), v); });
     out.pieces = (c.pieces || []).map(function (p, i) {
       var np = Object.assign(nouvellePiece(i + 1), p);
-      np.radiateur = Object.assign(nouvellePiece(1).radiateur, p.radiateur);
+      // Relevés antérieurs : un seul radiateur (« radiateur »), repris s'il était renseigné.
+      var anciens = Array.isArray(p.radiateurs) ? p.radiateurs : (p.radiateur && p.radiateur.materiau ? [p.radiateur] : []);
+      delete np.radiateur;
+      np.radiateurs = anciens.map(function (r) { return Object.assign(nouveauRadiateur(), r, { uid: r.uid || uid() }); });
       np.vitrages = (p.vitrages || []).map(function (v) { return Object.assign(nouveauVitrage(), v); });
       np.vitrageRapide = Object.assign(nouvellePiece(1).vitrageRapide, p.vitrageRapide);
       if (!np.uid) np.uid = uid();
@@ -458,11 +465,14 @@
       '</div></section>';
   }
 
-  function renderRadiateur(p, i) {
-    var base = 'pieces.' + i + '.radiateur';
-    var r = p.radiateur;
-    var html = '<div class="grid">' +
-      liste('Radiateur existant', base + '.materiau', table2options(D.MATERIAUX_RADIATEUR), { vide: '— Non relevé —', cls: 'span-2' });
+  function renderRadiateur(p, i, k) {
+    var base = 'pieces.' + i + '.radiateurs.' + k;
+    var r = p.radiateurs[k];
+    var html = '<div class="vitrage">' +
+      '<div class="vitrage-head"><span>Radiateur ' + (k + 1) + '</span>' +
+      '<button type="button" class="btn ghost small danger" data-action="supprimer-radiateur" data-i="' + i + '" data-j="' + k + '" aria-label="Supprimer le radiateur ' + (k + 1) + '">Supprimer</button></div>' +
+      '<div class="grid">' +
+      liste('Matériau', base + '.materiau', table2options(D.MATERIAUX_RADIATEUR), { cls: 'span-2' });
     if (r.materiau === 'acier') {
       html += liste('Type', base + '.typeAcier', D.RADIATEURS_ACIER.map(function (t) { return { value: t.id, label: t.label + ' (' + nf(t.wm2) + ' W/m²)' }; }), { cls: 'span-2' }) +
         champ('Hauteur', base + '.hauteur', { kind: 'num', unite: 'cm' }) +
@@ -472,8 +482,14 @@
       html += liste('Hauteur d\'élément', base + '.hauteurElement', D.HAUTEURS_ELEMENT.map(function (h) { return { value: String(h), label: h + ' mm (' + t[h] + ' W/élt)' }; })) +
         champ('Nombre d\'éléments', base + '.elements', { kind: 'int' });
     }
-    html += '</div>';
-    if (r.materiau) {
+    html += '</div><p class="hint" id="radex-' + p.uid + '-' + k + '"></p></div>';
+    return html;
+  }
+
+  function renderRadiateurs(p, i) {
+    var html = p.radiateurs.map(function (r, k) { return renderRadiateur(p, i, k); }).join('') +
+      '<button type="button" class="btn small" data-action="ajouter-radiateur" data-i="' + i + '">+ Ajouter un radiateur</button>';
+    if (p.radiateurs.length) {
       html += '<div class="radex" id="radex-' + p.uid + '"></div>' +
         '<p class="hint">Puissance ramenée au régime d\'eau ' + F.esc(state.installation.regimeEau) + ' °C (réglage dans « Installation »).</p>' +
         '<p class="hint warn">Valeurs catalogue indicatives ΔT50 (ordre de grandeur, non certifiées) : à recouper avec la documentation constructeur.</p>';
@@ -517,8 +533,8 @@
         '</div>' +
         '<div class="results" id="res-' + p.uid + '"></div>' +
         (airAir() ? '' :
-          '<h4 class="sub-title">Radiateur existant <span class="muted">(optionnel)</span></h4>' +
-          renderRadiateur(p, i));
+          '<h4 class="sub-title">Radiateurs existants <span class="muted">(optionnel)</span></h4>' +
+          renderRadiateurs(p, i));
     }
     return '<section class="card piece" aria-label="' + esc(p.nom) + '">' +
       '<div class="piece-head">' +
@@ -627,7 +643,8 @@
       ? '<span class="badge ok">Suffisant</span>'
       : '<span class="badge ko">Insuffisant · manque ' + W(ex.manque) + '</span>';
     var regime = state.installation.regimeEau;
-    return '<span>Puissance existante en ' + F.esc(regime) + ' °C</span><strong>' + W(ex.puissance) + '</strong>' + badge +
+    var n = ex.detail.length;
+    return '<span>Puissance existante' + (n > 1 ? ' (' + n + ' radiateurs)' : '') + ' en ' + F.esc(regime) + ' °C</span><strong>' + W(ex.puissance) + '</strong>' + badge +
       (r.facteurRegime !== 1 ? '<small class="reco-note">catalogue ΔT50 : ' + W(ex.puissanceCatalogue) + '</small>' : '');
   }
 
@@ -741,6 +758,12 @@
         if (det) { det.open = ouvert; det.dataset.uid = p.uid; }
       }
       setHTML('radex-' + p.uid, blocRadiateurExistant(r));
+      // Puissance de chaque radiateur, sous sa saisie.
+      p.radiateurs.forEach(function (rad, k) {
+        var d = r.radiateurExistant && r.radiateurExistant.detail.filter(function (x) { return x.index === k; })[0];
+        setHTML('radex-' + p.uid + '-' + k, d ? W(d.puissance) + ' en ' + F.esc(state.installation.regimeEau) + ' °C' +
+          (r.facteurRegime !== 1 ? ' (catalogue ΔT50 : ' + W(d.puissanceCatalogue) + ')' : '') : '');
+      });
       var niveau = D.find(D.NIVEAUX_VITRAGE, p.vitrageRapide.niveau);
       setHTML('vitrage-rapide-' + p.uid, niveau
         ? 'Surface vitrée estimée : ' + nf(r.surfaceVitree, 1) + ' m² (' + nf(niveau.ratio * 100) + ' % de la surface au sol' +
@@ -866,6 +889,7 @@
         copie.uid = uid();
         copie.nom = p.nom + ' (copie)';
         copie.vitrages.forEach(function (v) { v.uid = uid(); });
+        copie.radiateurs.forEach(function (r) { r.uid = uid(); });
         state.pieces.splice(i + 1, 0, copie);
         break;
       case 'supprimer-piece':
@@ -878,6 +902,12 @@
         return;
       case 'ajouter-vitrage':
         getPath(state, bt.dataset.base).vitrages.push(nouveauVitrage());
+        break;
+      case 'ajouter-radiateur':
+        p.radiateurs.push(nouveauRadiateur());
+        break;
+      case 'supprimer-radiateur':
+        p.radiateurs.splice(j, 1);
         break;
       case 'supprimer-vitrage':
         getPath(state, bt.dataset.base).vitrages.splice(j, 1);

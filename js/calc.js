@@ -155,6 +155,12 @@
     return Math.max(puissance, 0);
   }
 
+  // Radiateurs relevés d'une pièce : la liste, sinon l'unique radiateur des relevés antérieurs.
+  function radiateursPiece(piece) {
+    if (Array.isArray(piece.radiateurs)) return piece.radiateurs;
+    return piece.radiateur ? [piece.radiateur] : [];
+  }
+
   // Écart de température logarithmique moyen entre l'eau du radiateur et la pièce.
   function ecartLogarithmique(depart, retour, ambiance) {
     var a = depart - ambiance;
@@ -336,7 +342,7 @@
         equipements: estVide(g.equipements) ? '' : String(Math.max(num(g.equipements), 0) / n),
         debit: '',
         longueurRefend: D.PONTS_THERMIQUES.refendParM2 * emprise * hauteur,
-        radiateur: null
+        radiateurs: []
       });
     }
     // Baies : la plus grande d'abord, sur le niveau le moins vitré ; fenêtres de toit en haut.
@@ -488,7 +494,15 @@
 
     // Radiateurs : puissances catalogue (ΔT50) ramenées au régime d'eau de l'installation.
     var facteur = facteurRegime(regimeEau, climat.tConfortHiver);
-    var existant = radiateurExistant(piece.radiateur);
+    // Plusieurs radiateurs dans la pièce : leurs puissances s'additionnent.
+    var detailRadiateurs = [];
+    var existant = null;
+    radiateursPiece(piece).forEach(function (rad, k) {
+      var p = radiateurExistant(rad);
+      if (p === null) return;
+      existant = (existant || 0) + p;
+      detailRadiateurs.push({ index: k, puissanceCatalogue: p, puissance: p * facteur });
+    });
     var radiateur = null;
     if (existant !== null) {
       var puissance = existant * facteur;
@@ -496,6 +510,7 @@
       radiateur = {
         puissance: puissance,
         puissanceCatalogue: existant,
+        detail: detailRadiateurs,
         suffisant: suffisant,
         manque: suffisant ? 0 : chauffage - puissance
       };
@@ -542,7 +557,7 @@
     var global = chantier.mode === 'global';
     // Pièces calculées : celles du relevé, ou les niveaux virtuels du mode global.
     var sources = global ? piecesGlobales(chantier.global, foyer.n) : (chantier.pieces || []);
-    if (airAir) sources = sources.map(function (p) { return Object.assign({}, p, { radiateur: null }); });
+    if (airAir) sources = sources.map(function (p) { return Object.assign({}, p, { radiateur: null, radiateurs: [] }); });
     var pieces = sources.map(function (p) { return calculPiece(p, chantier.climat, regimeEau, foyer.n); });
     var K = D.CLIM;
     var chauffage = 0;
@@ -651,6 +666,7 @@
     debitEstime: debitEstime,
     palier: palier,
     radiateurExistant: radiateurExistant,
+    radiateursPiece: radiateursPiece,
     facteurRegime: facteurRegime,
     isolationMur: isolationMur,
     pontsThermiques: pontsThermiques,

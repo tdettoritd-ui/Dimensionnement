@@ -455,3 +455,18 @@ test('type d\'installation : air/eau par défaut, air/air sans radiateur ni rég
   proche(air.chauffage, eau.chauffage);
   proche(air.climatisation, eau.climatisation);
 });
+
+test('plusieurs radiateurs existants dans une pièce : puissances additionnées', () => {
+  const r1 = { materiau: 'acier', typeAcier: '22', hauteur: '60', longueur: '100' };
+  const r2 = { materiau: 'fonte', hauteurElement: '600', elements: '10' };
+  const piece = { nom: 'Séjour', longueur: '5', largeur: '4', hauteur: '2,5', lineaire: '9', sousToiture: 'oui', vitrages: [], occupants: '', equipements: '', debit: '',
+    radiateurs: [r1, { materiau: '' }, r2] };
+  const ex = C.calculPiece(piece, climat, '45/35').radiateurExistant;
+  const cat = C.radiateurExistant(r1) + C.radiateurExistant(r2);
+  proche(ex.puissanceCatalogue, cat);
+  proche(ex.puissance, cat * C.facteurRegime('45/35', climat.tConfortHiver));
+  assert.deepEqual(ex.detail.map(d => d.index), [0, 2]);
+  assert.equal(C.calculPiece({ ...piece, radiateurs: [] }, climat).radiateurExistant, null);
+  // Relevés antérieurs : un seul radiateur.
+  proche(C.calculPiece({ ...piece, radiateurs: undefined, radiateur: r1 }, climat).radiateurExistant.puissanceCatalogue, C.radiateurExistant(r1));
+});

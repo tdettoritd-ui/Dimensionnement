@@ -301,7 +301,7 @@
       startY: y + 6,
       margin: { left: MARGE, right: MARGE, top: MARGE, bottom: BAS },
       theme: 'grid',
-      head: [[global ? 'Niveau' : 'Pièce', 'Surface', 'Chauffage', 'Climatisation', 'Split', 'Radiateur neuf', 'Radiateur existant'].slice(0, colonnes).map(t)],
+      head: [[global ? 'Niveau' : 'Pièce', 'Surface', 'Chauffage', 'Climatisation', 'Split', 'Radiateur neuf', 'Radiateurs existants'].slice(0, colonnes).map(t)],
       body: lignesPieces,
       showFoot: 'lastPage',
       foot: [
@@ -357,7 +357,7 @@
           F.W(r.chauffageBase) + ' + relance ' + F.nf(r.surpuissance) + ' %'],
         ['Radiateur neuf préconisé', F.textePalierRadiateur(r.radiateurNeuf) +
           (r.facteurRegime !== 1 && r.radiateurNeuf.valeur ? ' (catalogue ΔT50, régime ' + ins.regimeEau + ' °C)' : '')],
-        ['Radiateur existant', F.texteRadiateurExistant(p, r, ins.regimeEau)]
+        ['Radiateurs existants', F.texteRadiateurExistant(p, r, ins.regimeEau)]
       ].filter(function (l) { return !((p.virtuel || airAir) && /^Radiateur/.test(l[0])); })
         .map(function (l) { return [t(l[0]), t(l[1])]; });
       var nom = t(p.nom);

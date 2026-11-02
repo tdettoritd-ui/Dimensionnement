@@ -96,14 +96,20 @@
   function texteRadiateurExistant(piece, resultat, regimeEau) {
     var ex = resultat.radiateurExistant;
     if (!ex) return '—';
-    var pr = piece.radiateur;
-    var desc = pr.materiau === 'acier'
-      ? 'Acier ' + libelle(D.RADIATEURS_ACIER, pr.typeAcier) + ' ' + (pr.hauteur || '?') + ' × ' + (pr.longueur || '?') + ' cm'
-      : libelle(D.MATERIAUX_RADIATEUR, pr.materiau) + ' ' + (pr.elements || '0') + ' élts de ' + pr.hauteurElement + ' mm';
-    var puissance = resultat.facteurRegime !== 1
-      ? W(ex.puissanceCatalogue) + ' à ΔT50, soit ' + W(ex.puissance) + ' en ' + regimeEau + ' °C'
-      : W(ex.puissance);
-    return desc + ' → ' + puissance + ' · ' + (ex.suffisant ? 'Suffisant' : 'Insuffisant (manque ' + W(ex.manque) + ')');
+    var radiateurs = C.radiateursPiece(piece);
+    var puissance = function (catalogue, reelle) {
+      return resultat.facteurRegime !== 1 ? W(catalogue) + ' à ΔT50, soit ' + W(reelle) + ' en ' + regimeEau + ' °C' : W(reelle);
+    };
+    // Une ligne par radiateur, puis le total s'il y en a plusieurs.
+    var lignes = ex.detail.map(function (d) {
+      var pr = radiateurs[d.index];
+      var desc = pr.materiau === 'acier'
+        ? 'Acier ' + libelle(D.RADIATEURS_ACIER, pr.typeAcier) + ' ' + (pr.hauteur || '?') + ' × ' + (pr.longueur || '?') + ' cm'
+        : libelle(D.MATERIAUX_RADIATEUR, pr.materiau) + ' ' + (pr.elements || '0') + ' élts de ' + pr.hauteurElement + ' mm';
+      return desc + ' → ' + puissance(d.puissanceCatalogue, d.puissance);
+    });
+    if (lignes.length > 1) lignes.push('Total ' + lignes.length + ' radiateurs → ' + puissance(ex.puissanceCatalogue, ex.puissance));
+    return lignes.join('\n') + ' · ' + (ex.suffisant ? 'Suffisant' : 'Insuffisant (manque ' + W(ex.manque) + ')');
   }
 
   // Type d'isolation des murs (ponts thermiques), tel que renvoyé par Calc.isolationMur.
