@@ -127,6 +127,27 @@
     return num(piece.longueur) * num(piece.largeur);
   }
 
+  // Linéaire de murs extérieurs d'après le nombre de murs exposés (0 à 4), côtés a ≥ b :
+  // 1 mur = a, 2 murs (angle) = a + b, 3 murs = 2a + b, 4 murs = 2(a + b).
+  // En saisie par surface, pièce carrée de même surface (côté √S).
+  function lineaireMurs(piece, n) {
+    var a, b;
+    if (piece.saisieSurface === 'surface') {
+      a = b = Math.sqrt(surfacePiece(piece));
+    } else {
+      a = Math.max(num(piece.longueur), num(piece.largeur), 0);
+      b = Math.max(Math.min(num(piece.longueur), num(piece.largeur)), 0);
+    }
+    return [0, a, a + b, 2 * a + b, 2 * (a + b)][Math.min(Math.max(Math.round(n), 0), 4)];
+  }
+
+  // Linéaire retenu : la saisie en ml, sinon le calcul d'après le nombre de murs exposés.
+  function lineairePiece(piece) {
+    if (!estVide(piece.lineaire)) return Math.max(num(piece.lineaire), 0);
+    if (!estVide(piece.mursExposes)) return lineaireMurs(piece, num(piece.mursExposes));
+    return 0;
+  }
+
   // Vitrages pris en compte : la liste détaillée, ou en saisie rapide un vitrage
   // équivalent dont la surface vaut ratio du niveau × surface au sol.
   function vitragesPiece(piece) {
@@ -218,7 +239,7 @@
     var plancher = plancherBas(climat);
     var b = bPlancher(climat);
     var toit = D.find(D.TOITURES, climat.toitureType);
-    var L = Math.max(num(piece.lineaire), 0);
+    var L = lineairePiece(piece);
     var H = Math.max(num(piece.hauteur), 0);
     var l = { plancherBas: 0, plancherHaut: 0, plancherIntermediaire: 0, refend: 0, menuiserie: 0 };
     var d = { plancherBas: 0, plancherHaut: 0, plancherIntermediaire: 0, refend: 0, menuiserie: 0 };
@@ -489,7 +510,8 @@
     });
 
     // Les baies verticales sont prises sur les murs, les fenêtres de toit sur la toiture.
-    var smur = Math.max(num(piece.lineaire) * num(piece.hauteur) - (surfaceVitree - surfaceFenetresToit), 0);
+    var lineaire = lineairePiece(piece);
+    var smur = Math.max(lineaire * num(piece.hauteur) - (surfaceVitree - surfaceFenetresToit), 0);
     var surfaceToiture = Math.max(s - surfaceFenetresToit, 0);
     var debit = debitRetenu(piece, climat);
     var pt = pontsThermiques(piece, climat);
@@ -545,6 +567,8 @@
       surfaceVitree: surfaceVitree,
       surfaceFenetresToit: surfaceFenetresToit,
       smur: smur,
+      lineaire: lineaire,
+      lineaireAuto: estVide(piece.lineaire) && !estVide(piece.mursExposes),
       u: { mur: u.mur, toiture: uToiture, plancher: uPlancher },
       debit: debit,
       debitAuto: estVide(piece.debit),
@@ -708,6 +732,8 @@
     piecesGlobales: piecesGlobales,
     puissanceNominale: puissanceNominale,
     surfacePiece: surfacePiece,
+    lineaireMurs: lineaireMurs,
+    lineairePiece: lineairePiece,
     vitragesPiece: vitragesPiece,
     calculPiece: calculPiece,
     calculChantier: calculChantier,

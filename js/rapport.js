@@ -349,7 +349,9 @@
         ['Dimensions', p.virtuel || p.saisieSurface === 'surface'
           ? F.nf(r.surface, 1) + ' m² × ' + (p.virtuel ? F.nf(C.num(p.hauteur), 2) : p.hauteur || '?') + ' m · ' + F.nf(r.volume, 1) + ' m³'
           : (p.longueur || '?') + ' × ' + (p.largeur || '?') + ' × ' + (p.hauteur || '?') + ' m · ' + F.nf(r.surface, 1) + ' m² · ' + F.nf(r.volume, 1) + ' m³'],
-        ['Murs ext. exposés', (p.virtuel ? F.nf(C.num(p.lineaire), 1) + ' ml' : (F.avecUnite(p.lineaire, 'ml') || '—')) + ' · sous toiture : ' + F.texteOuiNon(p.sousToiture) +
+        ['Murs ext. exposés', (p.virtuel || r.lineaire > 0 || !C.estVide(p.lineaire) || !C.estVide(p.mursExposes)
+          ? F.nf(r.lineaire, 1) + ' ml' + (!p.virtuel && !C.estVide(p.mursExposes) ? ' (' + p.mursExposes + ' mur' + (C.num(p.mursExposes) > 1 ? 's' : '') + (r.lineaireAuto ? ', calculé' : '') + ')' : '')
+          : '—') + ' · sous toiture : ' + F.texteOuiNon(p.sousToiture) +
           ' · sur plancher bas : ' + F.texteOuiNon(p.surPlancherBas)],
         ['Vitrages', vitrages.length ? vitrages.join('\n') : '—'],
         ['Occupants / équipements', F.nf(r.clim.occupants, 1) + ' (' + F.libelle(D.ACTIVITES, p.activite) + ') · ' + F.W(r.clim.equipements)],

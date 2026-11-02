@@ -78,6 +78,7 @@
       largeur: '',
       surface: '',
       hauteur: '2,5',
+      mursExposes: '',
       lineaire: '',
       sousToiture: 'oui',
       surPlancherBas: 'oui',
@@ -515,9 +516,9 @@
           : champ('Longueur', 'pieces.' + i + '.longueur', { kind: 'num', unite: 'm' }) +
             champ('Largeur', 'pieces.' + i + '.largeur', { kind: 'num', unite: 'm' })) +
         champ('Hauteur', 'pieces.' + i + '.hauteur', { kind: 'num', unite: 'm' }) +
-        champ('Murs ext. exposés', 'pieces.' + i + '.lineaire', {
-          kind: 'num', unite: 'ml',
-          bouton: { action: 'auto-lineaire', label: parSurface ? '4×√S' : '2×(L+l)', data: ' data-i="' + i + '"' },
+        bascule('Murs extérieurs exposés', 'pieces.' + i + '.mursExposes', [['0', '0'], ['1', '1'], ['2', '2'], ['3', '3'], ['4', '4']], { cls: 'span-2' }) +
+        champ('Linéaire de murs ext.', 'pieces.' + i + '.lineaire', {
+          kind: 'num', unite: 'ml', cls: 'span-2',
           aide: '', aideId: 'lineaire-aide-' + p.uid
         }) +
         bascule('Pièce sous toiture ?', 'pieces.' + i + '.sousToiture', [['oui', 'Oui'], ['non', 'Non (étage interm.)']], { obligatoire: true, cls: 'span-2' }) +
@@ -785,12 +786,17 @@
       // Alerte : sans linéaire, aucun mur extérieur n'est compté (cause fréquente de sous-évaluation).
       var aideLineaire = document.getElementById('lineaire-aide-' + p.uid);
       if (aideLineaire) {
-        var oubli = C.estVide(p.lineaire) && r.surface > 0;
+        var oubli = C.estVide(p.lineaire) && C.estVide(p.mursExposes) && r.surface > 0;
         aideLineaire.classList.toggle('warn', oubli);
         setHTML('lineaire-aide-' + p.uid, oubli
-          ? '⚠ Non saisi : aucun mur extérieur n\'est compté. Saisir le linéaire (ou 0 pour une pièce sans mur extérieur).'
-          : '');
+          ? '⚠ Non saisi : aucun mur extérieur n\'est compté. Choisir le nombre de murs exposés (0 si aucun) ou saisir le linéaire.'
+          : r.lineaireAuto
+            ? 'Calculé : ' + nf(r.lineaire, 2) + ' ml pour ' + esc(p.mursExposes) + ' mur' + (C.num(p.mursExposes) > 1 ? 's' : '') +
+              (p.saisieSurface === 'surface' ? ' (pièce carrée de même surface)' : ' (grands côtés d\'abord)') + '. Saisir une valeur pour la remplacer.'
+            : !C.estVide(p.lineaire) && !C.estVide(p.mursExposes) ? 'Valeur saisie retenue ; vider le champ pour le calcul automatique.' : '');
       }
+      var champLin = document.querySelector('[data-bind="pieces.' + i + '.lineaire"]');
+      if (champLin) champLin.placeholder = C.estVide(p.mursExposes) ? '' : 'auto : ' + nf(C.lineaireMurs(p, C.num(p.mursExposes)), 2);
     });
 
     var u = C.uEnveloppe(state.climat);
@@ -872,6 +878,9 @@
       var path = bt.dataset.set;
       var v = bt.dataset.value;
       setPath(state, path, getPath(state, path) === v && bt.hasAttribute('data-clear') ? '' : v);
+      // Choix du nombre de murs exposés : le linéaire est recalculé (saisie manuelle effacée).
+      var mm = /^pieces\.(\d+)\.mursExposes$/.exec(path);
+      if (mm) state.pieces[+mm[1]].lineaire = '';
       // Passage à la saisie en m² : reprend la surface longueur × largeur déjà saisie.
       var m = /^pieces\.(\d+)\.saisieSurface$/.exec(path);
       var pc = m && state.pieces[+m[1]];
@@ -917,13 +926,6 @@
         break;
       case 'supprimer-vitrage':
         getPath(state, bt.dataset.base).vitrages.splice(j, 1);
-        break;
-      case 'auto-lineaire':
-        // En saisie par surface, périmètre d'une pièce carrée de même surface.
-        var perimetre = p.saisieSurface === 'surface'
-          ? 4 * Math.sqrt(C.surfacePiece(p))
-          : 2 * (C.num(p.longueur) + C.num(p.largeur));
-        p.lineaire = String(Math.round(perimetre * 100) / 100).replace('.', ',');
         break;
       case 'estimer-debit':
         p.debit = String(Math.round(C.debitEstime(p, state.climat) * 10) / 10).replace('.', ',');

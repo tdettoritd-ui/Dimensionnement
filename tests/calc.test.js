@@ -493,3 +493,19 @@ test('plancher bas : type de dalle et local dessous (b), relevés antérieurs re
   const ancien = { ...climat, plancherType: 'bois_vs' };
   proche(C.uEnveloppe(ancien).plancher, C.uEnveloppe(k('bois', 'vide_sanitaire')).plancher);
 });
+
+test('murs exposés : linéaire calculé d\'après le nombre de murs, saisie prioritaire', () => {
+  const p = { longueur: '5', largeur: '3', hauteur: '2,5', sousToiture: 'non', vitrages: [] };
+  assert.deepEqual([0, 1, 2, 3, 4].map(n => C.lineaireMurs(p, n)), [0, 5, 8, 13, 16]);
+  const carre = { saisieSurface: 'surface', surface: '16' };
+  assert.deepEqual([1, 2, 4].map(n => C.lineaireMurs(carre, n)), [4, 8, 16]);
+  assert.equal(C.lineairePiece({ ...p, mursExposes: '2', lineaire: '' }), 8);
+  assert.equal(C.lineairePiece({ ...p, mursExposes: '2', lineaire: '6,5' }), 6.5);
+  assert.equal(C.lineairePiece({ ...p, mursExposes: '', lineaire: '' }), 0);
+  // Même résultat qu'avec le linéaire saisi à la main.
+  const auto = C.calculPiece({ ...p, mursExposes: '3', lineaire: '' }, climat);
+  const main = C.calculPiece({ ...p, lineaire: '13' }, climat);
+  proche(auto.G, main.G);
+  assert.equal(auto.lineaireAuto, true);
+  assert.equal(main.lineaireAuto, false);
+});
