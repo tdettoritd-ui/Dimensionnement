@@ -355,6 +355,10 @@
           ? F.nf(r.lineaire, 1) + ' ml' + (!p.virtuel && !C.estVide(p.mursExposes) ? ' (' + p.mursExposes + ' mur' + (C.num(p.mursExposes) > 1 ? 's' : '') + (r.lineaireAuto ? ', calculé' : '') + ')' : '')
           : '—') + ' · sous toiture : ' + F.texteOuiNon(p.sousToiture) +
           ' · sur plancher bas : ' + F.texteOuiNon(p.surPlancherBas)],
+        ['Isolation des murs', r.isolationMursPerso
+          ? F.isolantTexte(p.isolantMur) + (C.rIsolant(p.isolantMur) > 0 ? (p.positionIsolantMur === 'exterieur' ? ' (ITE)' : ' (ITI)') : '') +
+            ' – propre à la pièce (U ' + F.nf(r.u.mur, 2) + ')'
+          : ''],
         ['Vitrages', vitrages.length ? vitrages.join('\n') : '—'],
         ['Occupants / équipements', F.nf(r.clim.occupants, 1) + ' (' + F.libelle(D.ACTIVITES, p.activite) + ') · ' + F.W(r.clim.equipements)],
         ['Ventilation', F.nf(r.debit, 1) + ' m³/h' + (r.debitAuto ? ' (estimé)' : '')],
@@ -367,7 +371,7 @@
         ['Radiateur neuf préconisé', F.textePalierRadiateur(r.radiateurNeuf) +
           (r.facteurRegime !== 1 && r.radiateurNeuf.valeur ? ' (catalogue ΔT50, régime ' + ins.regimeEau + ' °C)' : '')],
         ['Radiateurs existants', F.texteRadiateurExistant(p, r, ins.regimeEau)]
-      ].filter(function (l) { return !((p.virtuel || airAir) && /^Radiateur/.test(l[0])); })
+      ].filter(function (l) { return !((p.virtuel || airAir) && /^Radiateur/.test(l[0])) && !(l[0] === 'Isolation des murs' && !l[1]); })
         .map(function (l) { return [t(l[0]), t(l[1])]; });
       var nom = t(p.nom);
       sautSiBesoin(Math.min(hauteurBloc(nom, lignes) * 1.1, HAUT - BAS - MARGE - 2));

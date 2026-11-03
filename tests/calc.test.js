@@ -548,3 +548,21 @@ test('murs : épaisseur et revêtement intérieur', () => {
   proche(C.uEnveloppe(k({ murType: 'parpaing', revetementMur: 'ba13', isolantMur: { materiau: 'laine_verre', epaisseur: '10' } })).mur,
     1 / (R(D.MURS, 'parpaing') + rev('ba13') + 0.10 / lambda('laine_verre')));
 });
+
+test('isolation des murs propre à une pièce, sinon celle du chantier', () => {
+  const p = { longueur: '4', largeur: '4', hauteur: '2,5', lineaire: '8', sousToiture: 'non', vitrages: [] };
+  const ref = C.calculPiece(p, climat);
+  // « chantier » (ou absent) : isolation du chantier.
+  proche(C.calculPiece({ ...p, isolationMurs: 'chantier', isolantMur: { materiau: 'aucun', epaisseur: '' } }, climat).G, ref.G);
+  assert.equal(ref.isolationMursPerso, false);
+  // « perso » non isolée : U mur et ponts thermiques sans isolant.
+  const nu = C.calculPiece({ ...p, isolationMurs: 'perso', isolantMur: { materiau: 'aucun', epaisseur: '' } }, climat);
+  assert.equal(nu.isolationMursPerso, true);
+  proche(nu.u.mur, 1 / R(D.MURS, 'parpaing'));
+  assert.equal(nu.pontsThermiques.isolation, 'non_isole');
+  assert.ok(nu.chauffage > ref.chauffage);
+  // « perso » en ITE : ponts thermiques ITE, U selon l'isolant de la pièce.
+  const ite = C.calculPiece({ ...p, isolationMurs: 'perso', isolantMur: { materiau: 'laine_verre', epaisseur: '14' }, positionIsolantMur: 'exterieur' }, climat);
+  proche(ite.u.mur, 1 / (R(D.MURS, 'parpaing') + 0.14 / lambda('laine_verre')));
+  assert.equal(ite.pontsThermiques.isolation, 'ite');
+});

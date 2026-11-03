@@ -509,7 +509,17 @@
 
   // regimeEau (facultatif) : régime d'eau des radiateurs, id de D.REGIMES_EAU.
   // foyer (facultatif) : personnes du foyer, pour les occupants par défaut des pièces de vie.
-  function calculPiece(piece, climat, regimeEau, foyer) {
+  // Isolation des murs propre à la pièce (isolationMurs « perso »), sinon celle du chantier.
+  function climatPiece(piece, climat) {
+    if (piece.isolationMurs !== 'perso') return climat;
+    return Object.assign({}, climat, {
+      isolantMur: piece.isolantMur || { materiau: 'aucun', epaisseur: '' },
+      positionIsolantMur: piece.positionIsolantMur || 'interieur'
+    });
+  }
+
+  function calculPiece(piece, climatChantier, regimeEau, foyer) {
+    var climat = climatPiece(piece, climatChantier);
     var u = uEnveloppe(climat);
     var s = surfacePiece(piece);
     var volume = s * num(piece.hauteur);
@@ -600,6 +610,7 @@
       G: G,
       tConfortHiver: num(tConfort),
       tConfortAuto: confortAuto,
+      isolationMursPerso: climat !== climatChantier,
       chauffageBase: chauffageBase,
       surpuissance: surpuissance,
       chauffage: chauffage,
@@ -733,6 +744,7 @@
     rIsolant: rIsolant,
     uParoi: uParoi,
     uEnveloppe: uEnveloppe,
+    climatPiece: climatPiece,
     epaisseurMur: epaisseurMur,
     rMur: rMur,
     plancherBas: plancherBas,

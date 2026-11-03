@@ -81,6 +81,9 @@
       surface: '',
       hauteur: '2,5',
       tConfortHiver: '',
+      isolationMurs: 'chantier',
+      isolantMur: { materiau: 'aucun', epaisseur: '' },
+      positionIsolantMur: 'interieur',
       mursExposes: '',
       lineaire: '',
       sousToiture: 'oui',
@@ -165,6 +168,7 @@
       var anciens = Array.isArray(p.radiateurs) ? p.radiateurs : (p.radiateur && p.radiateur.materiau ? [p.radiateur] : []);
       delete np.radiateur;
       np.radiateurs = anciens.map(function (r) { return Object.assign(nouveauRadiateur(), r, { uid: r.uid || uid() }); });
+      np.isolantMur = Object.assign({ materiau: 'aucun', epaisseur: '' }, p.isolantMur);
       np.vitrages = (p.vitrages || []).map(function (v) { return Object.assign(nouveauVitrage(), v); });
       np.vitrageRapide = Object.assign(nouvellePiece(1).vitrageRapide, p.vitrageRapide);
       if (!np.uid) np.uid = uid();
@@ -512,6 +516,22 @@
     return html;
   }
 
+  // Isolation des murs de la pièce, quand elle diffère de celle du chantier.
+  function renderIsolationMurs(p, i) {
+    var base = 'pieces.' + i;
+    var html = bascule('Isolation des murs', base + '.isolationMurs', [['chantier', 'Celle du chantier'], ['perso', 'Différente']], { obligatoire: true, cls: 'span-2' });
+    if (p.isolationMurs !== 'perso') return html;
+    var mat = p.isolantMur.materiau;
+    html += '<div class="field-pair span-2">' +
+      liste('Isolant murs de la pièce', base + '.isolantMur.materiau', table2options(D.ISOLANTS)) +
+      (mat && mat !== 'aucun' ? champ('Épaisseur', base + '.isolantMur.epaisseur', { kind: 'num', unite: 'cm', cls: 'narrow' }) : '') +
+      '</div>';
+    if (mat && mat !== 'aucun') {
+      html += bascule('Isolant posé', base + '.positionIsolantMur', [['interieur', 'Par l\'intérieur (ITI)'], ['exterieur', 'Par l\'extérieur (ITE)']], { obligatoire: true, cls: 'span-2' });
+    }
+    return html + '<p class="hint span-2" id="u-mur-' + p.uid + '"></p>';
+  }
+
   function renderPiece(p, i) {
     var replie = ui.replie[p.uid];
     var corps = '';
@@ -530,6 +550,7 @@
           kind: 'num', unite: 'ml', cls: 'span-2',
           aide: '', aideId: 'lineaire-aide-' + p.uid
         }) +
+        renderIsolationMurs(p, i) +
         bascule('Pièce sous toiture ?', 'pieces.' + i + '.sousToiture', [['oui', 'Oui'], ['non', 'Non (étage interm.)']], { obligatoire: true, cls: 'span-2' }) +
         bascule('Pièce sur plancher bas ?', 'pieces.' + i + '.surPlancherBas', [['oui', 'Oui'], ['non', 'Non (à l\'étage)']], { obligatoire: true, cls: 'span-2' }) +
         '</div>' +
@@ -788,6 +809,7 @@
         : '');
       var input = document.querySelector('[data-bind="pieces.' + i + '.debit"]');
       if (input) input.placeholder = 'auto : ' + nf(r.debitEstime, 1);
+      setHTML('u-mur-' + p.uid, 'U mur de la pièce : ' + nf(r.u.mur, 2) + ' W/m².K (chantier : ' + nf(C.uEnveloppe(state.climat).mur, 2) + ').');
       var champConfort = document.querySelector('[data-bind="pieces.' + i + '.tConfortHiver"]');
       if (champConfort) champConfort.placeholder = 'auto : ' + nf(C.num(state.climat.tConfortHiver), 1);
       var champOcc = document.querySelector('[data-bind="pieces.' + i + '.occupants"]');
@@ -897,6 +919,13 @@
       // Choix du nombre de murs exposés : le linéaire est recalculé (saisie manuelle effacée).
       var mm = /^pieces\.(\d+)\.mursExposes$/.exec(path);
       if (mm) state.pieces[+mm[1]].lineaire = '';
+      // Isolation différente : part de celle du chantier, à modifier.
+      var mi = /^pieces\.(\d+)\.isolationMurs$/.exec(path);
+      if (mi && v === 'perso') {
+        var pi = state.pieces[+mi[1]];
+        pi.isolantMur = JSON.parse(JSON.stringify(state.climat.isolantMur));
+        pi.positionIsolantMur = state.climat.positionIsolantMur;
+      }
       // Passage à la saisie en m² : reprend la surface longueur × largeur déjà saisie.
       var m = /^pieces\.(\d+)\.saisieSurface$/.exec(path);
       var pc = m && state.pieces[+m[1]];
