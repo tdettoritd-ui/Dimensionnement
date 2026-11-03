@@ -57,6 +57,8 @@
       surpuissance: '10',
       majorationClim: '',
       murType: 'parpaing',
+      epaisseurMur: '',
+      revetementMur: 'aucun',
       plancherDalle: 'beton',
       plancherLocal: 'terre_plein',
       toitureType: 'combles',
@@ -318,7 +320,12 @@
           '+10 % : construction légère très vitrée à l\'Ouest, véranda. Pour les canicules, relever plutôt la T° de base été.' }) +
       '</div>' +
       '<h3 class="sub-title">Murs</h3><div class="grid">' +
-      liste('Type de paroi', 'climat.murType', D.MURS.map(function (m) { return { value: m.id, label: m.label + ' – R ' + nf(m.r, 2) }; }), { cls: 'span-2' }) +
+      liste('Type de paroi', 'climat.murType', table2options(D.MURS), { cls: 'span-2' }) +
+      (C.epaisseurMur(c) !== null
+        ? champ('Épaisseur du mur', 'climat.epaisseurMur', { kind: 'num', unite: 'cm', placeholder: 'auto : ' + C.epaisseurMur({ murType: c.murType }) })
+        : '') +
+      liste('Revêtement intérieur', 'climat.revetementMur', table2options(D.REVETEMENTS_MUR), { cls: 'span-2' }) +
+      '<p class="hint span-2" id="r-mur"></p>' +
       isolant('murs', 'isolantMur') +
       (c.isolantMur.materiau && c.isolantMur.materiau !== 'aucun'
         ? bascule('Isolant des murs posé', 'climat.positionIsolantMur', [['interieur', 'Par l\'intérieur (ITI)'], ['exterieur', 'Par l\'extérieur (ITE)']], { obligatoire: true, cls: 'span-2' })
@@ -805,6 +812,8 @@
     });
 
     var u = C.uEnveloppe(state.climat);
+    setHTML('r-mur', 'R du mur hors isolant : ' + nf(C.rMur(state.climat), 2) + ' m².K/W' +
+      (C.epaisseurMur(state.climat) !== null ? ' (' + nf(C.epaisseurMur(state.climat), 1) + ' cm' + (C.estVide(state.climat.epaisseurMur) ? ', épaisseur courante' : '') + ')' : '') + '.');
     setHTML('u-enveloppe', 'U mur ' + nf(u.mur, 2) + ' · U toiture ' + nf(u.toiture, 2) + ' · U plancher ' + nf(u.plancher, 2) + ' W/m².K');
     setHTML('g-global', res.volume > 0
       ? 'Coefficient G estimé : <strong>' + nf(res.coefficientG, 2) + ' W/m³.K</strong> · déperditions ' + nf(res.deperditionsTotales) +
@@ -859,6 +868,8 @@
     var el = e.target;
     if (!el.dataset.bind || el.tagName !== 'SELECT') return;
     setPath(state, el.dataset.bind, el.value);
+    // Autre type de paroi : l'épaisseur saisie ne vaut plus, retour à l'épaisseur courante.
+    if (el.dataset.bind === 'climat.murType') state.climat.epaisseurMur = '';
     if (el.dataset.bind === 'climat.zone') {
       var z = D.find(D.ZONES, el.value);
       if (z) state.climat.tBaseHiver = String(z.t);

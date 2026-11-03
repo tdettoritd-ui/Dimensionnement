@@ -23,14 +23,27 @@
 
   // Résistance de base des murs (m².K/W, avant isolant rapporté), résistances superficielles
   // comprises (R = 1 / U0 des tables 3CL-DPE 2021). Révision octobre 2026 : voir README.
+  // r : résistance du mur à l'épaisseur e (cm), résistances superficielles comprises (R_SURFACE_MUR).
+  // Une autre épaisseur saisie donne r = R_SURFACE_MUR + épaisseur / λ, λ déduit de r et e.
+  // Ossature bois : sans e, la résistance ne dépend pas de l'épaisseur saisie (isolant à part).
   var MURS = [
-    { id: 'pierre', label: 'Pierre / brique pleine (ancien)', r: 0.40, inertie: 'lourd' },
-    { id: 'parpaing', label: 'Parpaing / béton banché', r: 0.40, inertie: 'moyen' },
-    { id: 'machefer', label: 'Mâchefer (parpaing / agglo)', r: 0.42, inertie: 'moyen' },
-    { id: 'brique_creuse', label: 'Brique creuse (20-25 cm)', r: 0.55, inertie: 'moyen' },
-    { id: 'monomur', label: 'Brique monomur / alvéolaire (30-37,5 cm)', r: 2.1, itr: true, inertie: 'lourd' },
-    { id: 'beton_cellulaire', label: 'Béton cellulaire', r: 1.43, itr: true, inertie: 'lourd' },
+    { id: 'pierre', label: 'Pierre / brique pleine (ancien)', r: 0.40, e: 50, inertie: 'lourd' },
+    { id: 'parpaing', label: 'Parpaing / béton banché', r: 0.40, e: 20, inertie: 'moyen' },
+    { id: 'machefer', label: 'Mâchefer (parpaing / agglo)', r: 0.42, e: 20, inertie: 'moyen' },
+    { id: 'brique_creuse', label: 'Brique creuse', r: 0.55, e: 20, inertie: 'moyen' },
+    { id: 'monomur', label: 'Brique monomur / alvéolaire', r: 2.1, e: 30, itr: true, inertie: 'lourd' },
+    { id: 'beton_cellulaire', label: 'Béton cellulaire', r: 1.43, e: 25, itr: true, inertie: 'lourd' },
     { id: 'ossature_bois', label: 'Ossature bois', r: 0.30, itr: true, bois: true, inertie: 'leger' }
+  ];
+  var R_SURFACE_MUR = 0.17; // m².K/W : Rsi + Rse d'un mur extérieur
+
+  // Revêtement intérieur des murs : résistance ajoutée (m².K/W), sans isolant.
+  var REVETEMENTS_MUR = [
+    { id: 'aucun', label: 'Aucun / enduit ciment', r: 0 },
+    { id: 'platre', label: 'Enduit plâtre (≈ 1,5 cm)', r: 0.03 },
+    { id: 'ba13', label: 'BA13 (plaque de plâtre 12,5 mm)', r: 0.05 },
+    { id: 'bois', label: 'Lambris bois (≈ 1,5 cm sur tasseaux)', r: 0.12 },
+    { id: 'ytong', label: 'Contre-cloison Ytong / béton cellulaire (7 cm)', r: 0.58 }
   ];
 
   // Été : écart de température équivalent des murs au soleil (ETD, K), tabulé pour 32 / 26 °C,
@@ -332,6 +345,8 @@
     ETD_MURS: ETD_MURS,
     TYPES_PIECE: TYPES_PIECE,
     CLIM: CLIM,
+    R_SURFACE_MUR: R_SURFACE_MUR,
+    REVETEMENTS_MUR: REVETEMENTS_MUR,
     SYSTEMES: SYSTEMES,
     PALIERS_RADIATEUR: PALIERS_RADIATEUR,
     RADIATEURS_ACIER: RADIATEURS_ACIER,

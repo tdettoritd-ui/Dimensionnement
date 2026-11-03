@@ -528,3 +528,23 @@ test('confort hiver propre à une pièce : vide = celui du chantier', () => {
   const tot = C.calculChantier({ climat, prime: {}, pieces: [p, { ...p, tConfortHiver: '24' }] });
   proche(tot.chauffage, ref.chauffage + sdb.chauffage);
 });
+
+test('murs : épaisseur et revêtement intérieur', () => {
+  const k = (o) => ({ ...climat, isolantMur: { materiau: 'aucun', epaisseur: '' }, ...o });
+  const RS = D.R_SURFACE_MUR;
+  // Épaisseur vide : R du type de paroi, inchangé.
+  proche(C.rMur(k({ murType: 'parpaing' })), R(D.MURS, 'parpaing'));
+  assert.equal(C.epaisseurMur(k({ murType: 'parpaing' })), 20);
+  // Épaisseur doublée : la part maçonnerie double.
+  proche(C.rMur(k({ murType: 'parpaing', epaisseurMur: '40' })), RS + 2 * (R(D.MURS, 'parpaing') - RS));
+  proche(C.rMur(k({ murType: 'pierre', epaisseurMur: '60' })), RS + 1.2 * (R(D.MURS, 'pierre') - RS));
+  // Ossature bois : épaisseur sans effet.
+  assert.equal(C.epaisseurMur(k({ murType: 'ossature_bois', epaisseurMur: '15' })), null);
+  proche(C.rMur(k({ murType: 'ossature_bois', epaisseurMur: '15' })), R(D.MURS, 'ossature_bois'));
+  // Revêtement intérieur ajouté.
+  const rev = (id) => D.find(D.REVETEMENTS_MUR, id).r;
+  ['platre', 'ba13', 'bois', 'ytong'].forEach(id =>
+    proche(C.rMur(k({ murType: 'parpaing', revetementMur: id })), R(D.MURS, 'parpaing') + rev(id)));
+  proche(C.uEnveloppe(k({ murType: 'parpaing', revetementMur: 'ba13', isolantMur: { materiau: 'laine_verre', epaisseur: '10' } })).mur,
+    1 / (R(D.MURS, 'parpaing') + rev('ba13') + 0.10 / lambda('laine_verre')));
+});

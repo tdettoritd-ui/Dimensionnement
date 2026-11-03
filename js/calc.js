@@ -61,11 +61,30 @@
     return p.local.b / (r + D.R_SE_LOCAL);
   }
 
-  function uEnveloppe(climat) {
+  // Épaisseur du mur retenue (cm) : la saisie, sinon l'épaisseur courante du type de paroi.
+  function epaisseurMur(climat) {
     var mur = D.find(D.MURS, climat.murType);
+    if (!mur || !mur.e) return null;
+    return estVide(climat.epaisseurMur) || !(num(climat.epaisseurMur) > 0) ? mur.e : num(climat.epaisseurMur);
+  }
+
+  // Résistance du mur hors isolant : maçonnerie à l'épaisseur retenue + revêtement intérieur.
+  function rMur(climat) {
+    var mur = D.find(D.MURS, climat.murType);
+    if (!mur) return null;
+    var r = mur.r;
+    if (mur.e) {
+      var lambda = mur.e / 100 / (mur.r - D.R_SURFACE_MUR);
+      r = D.R_SURFACE_MUR + epaisseurMur(climat) / 100 / lambda;
+    }
+    var rev = D.find(D.REVETEMENTS_MUR, climat.revetementMur);
+    return r + (rev ? rev.r : 0);
+  }
+
+  function uEnveloppe(climat) {
     var toit = D.find(D.TOITURES, climat.toitureType);
     return {
-      mur: mur ? uParoi(mur.r, climat.isolantMur) : 0,
+      mur: uParoi(rMur(climat), climat.isolantMur),
       toiture: toit ? uParoi(toit.r, climat.isolantToiture) : 0,
       plancher: uPlancher(climat)
     };
@@ -714,6 +733,8 @@
     rIsolant: rIsolant,
     uParoi: uParoi,
     uEnveloppe: uEnveloppe,
+    epaisseurMur: epaisseurMur,
+    rMur: rMur,
     plancherBas: plancherBas,
     uVitrage: uVitrage,
     debitEstime: debitEstime,

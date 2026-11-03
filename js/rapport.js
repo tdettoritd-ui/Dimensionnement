@@ -236,7 +236,9 @@
         ['Confort hiver / été', k.tConfortHiver + ' °C / ' + k.tConfortEte + ' °C'],
         ['Surpuissance de relance', (C.estVide(k.surpuissance) ? '0' : k.surpuissance) + ' %'],
         ['Majoration clim', (C.estVide(k.majorationClim) ? '0' : k.majorationClim) + ' %'],
-        ['Murs', F.libelle(D.MURS, k.murType) + ' + ' + F.isolantTexte(k.isolantMur) + ' (U ' + F.nf(u.mur, 2) + ')' +
+        ['Murs', F.libelle(D.MURS, k.murType) + (C.epaisseurMur(k) !== null ? ' ' + F.nf(C.epaisseurMur(k), 1) + ' cm' : '') +
+          (k.revetementMur && k.revetementMur !== 'aucun' ? ', ' + F.libelle(D.REVETEMENTS_MUR, k.revetementMur).toLowerCase() : '') +
+          ' + ' + F.isolantTexte(k.isolantMur) + ' (U ' + F.nf(u.mur, 2) + ')' +
           ' – ponts thermiques : ' + F.LIBELLES_ISOLATION[C.isolationMur(k)]],
         ['Plancher bas', (function () {
           var pb = C.plancherBas(k);
