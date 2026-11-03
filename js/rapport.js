@@ -356,8 +356,10 @@
           : '—') + ' · sous toiture : ' + F.texteOuiNon(p.sousToiture) +
           ' · sur plancher bas : ' + F.texteOuiNon(p.surPlancherBas)],
         ['Isolation des murs', r.isolationMursPerso
-          ? F.isolantTexte(p.isolantMur) + (C.rIsolant(p.isolantMur) > 0 ? (p.positionIsolantMur === 'exterieur' ? ' (ITE)' : ' (ITI)') : '') +
-            ' – propre à la pièce (U ' + F.nf(r.u.mur, 2) + ')'
+          ? r.mursIsolation.filter(function (m) { return m.longueur > 0 || r.mursIsolation.length === 1; }).map(function (m) {
+            return F.nf(m.longueur, 2) + ' ml : ' + (m.chantier ? 'isolation du chantier' : F.isolantTexte(m.isolantMur) +
+              (C.rIsolant(m.isolantMur) > 0 ? (m.position === 'exterieur' ? ' (ITE)' : ' (ITI)') : '')) + ' (U ' + F.nf(m.u, 2) + ')';
+          }).join('\n') + '\nU mur moyen de la pièce : ' + F.nf(r.u.mur, 2)
           : ''],
         ['Vitrages', vitrages.length ? vitrages.join('\n') : '—'],
         ['Occupants / équipements', F.nf(r.clim.occupants, 1) + ' (' + F.libelle(D.ACTIVITES, p.activite) + ') · ' + F.W(r.clim.equipements)],

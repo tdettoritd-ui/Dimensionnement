@@ -160,11 +160,53 @@
     return [0, a, a + b, 2 * a + b, 2 * (a + b)][Math.min(Math.max(Math.round(n), 0), 4)];
   }
 
-  // Linéaire retenu : la saisie en ml, sinon le calcul d'après le nombre de murs exposés.
+  // Linéaire retenu : la saisie en ml, sinon le calcul d'après le nombre de murs exposés,
+  // sinon la somme des longueurs des murs à isolation propre.
   function lineairePiece(piece) {
     if (!estVide(piece.lineaire)) return Math.max(num(piece.lineaire), 0);
     if (!estVide(piece.mursExposes)) return lineaireMurs(piece, num(piece.mursExposes));
-    return 0;
+    var somme = 0;
+    mursIsolationPiece(piece).forEach(function (m) { somme += Math.max(num(m.longueur), 0); });
+    return somme;
+  }
+
+  // Murs à isolation propre de la pièce (isolationMurs « perso ») ; relevés antérieurs : une seule
+  // isolation pour tous les murs (isolantMur de la pièce), soit un mur sans longueur.
+  function mursIsolationPiece(piece) {
+    if (piece.isolationMurs !== 'perso') return [];
+    if (Array.isArray(piece.mursIsolation)) return piece.mursIsolation;
+    var iso = piece.isolantMur || {};
+    return [{ longueur: '', materiau: iso.materiau, epaisseur: iso.epaisseur, position: piece.positionIsolantMur }];
+  }
+
+  // Répartition du linéaire de murs extérieurs entre isolations : chaque mur saisi compte sa longueur,
+  // le premier mur sans longueur prend le reste ; le linéaire restant garde l'isolation du chantier.
+  // Les baies sont réparties au prorata des longueurs. Retourne [{ climat, f, longueur, chantier }].
+  function segmentsMurs(piece, climat) {
+    var murs = mursIsolationPiece(piece);
+    if (!murs.length) return [{ climat: climat, f: 1, longueur: lineairePiece(piece), chantier: true }];
+    var L = lineairePiece(piece);
+    var saisi = 0;
+    murs.forEach(function (m) { saisi += Math.max(num(m.longueur), 0); });
+    // Longueurs saisies plus grandes que le linéaire : ramenées au linéaire.
+    var echelle = saisi > L && saisi > 0 ? L / saisi : 1;
+    var reste = Math.max(L - saisi * echelle, 0);
+    var segments = murs.map(function (m) {
+      var longueur = Math.max(num(m.longueur), 0) * echelle;
+      if (estVide(m.longueur) && reste > 0) { longueur = reste; reste = 0; }
+      return {
+        climat: Object.assign({}, climat, {
+          isolantMur: { materiau: m.materiau || 'aucun', epaisseur: m.epaisseur || '' },
+          positionIsolantMur: m.position === 'exterieur' ? 'exterieur' : 'interieur'
+        }),
+        longueur: longueur,
+        chantier: false
+      };
+    });
+    if (reste > 0) segments.push({ climat: climat, longueur: reste, chantier: true });
+    // Linéaire nul : une seule isolation retenue (la première), sans effet sur les murs.
+    segments.forEach(function (sg, k) { sg.f = L > 0 ? sg.longueur / L : (k === 0 ? 1 : 0); });
+    return segments;
   }
 
   // Vitrages pris en compte : la liste détaillée, ou en saisie rapide un vitrage
@@ -463,7 +505,11 @@
       vitrages += Math.max(type.u, U_VITRAGE_MIN) * s * ecart;
     });
 
-    var murs = r.u.mur * r.smur * etdMur(climat, supplement);
+    // Murs au soleil : chaque isolation avec son écart équivalent, au prorata du linéaire.
+    var murs = 0;
+    (r.segments || [{ climat: climat, f: 1, uMur: r.u.mur }]).forEach(function (sg) {
+      murs += sg.f * sg.uMur * r.smur * etdMur(sg.climat, supplement);
+    });
     var toiture = r.surfaceToiture * r.u.toiture * etdToiture(climat, supplement);
     // Le plancher bas (sur sol ou local non chauffé) n'apporte pas de chaleur l'été.
     var ponts = (r.pontsThermiques.total - r.pontsThermiques.detail.plancherBas) * ecart;
@@ -509,18 +555,30 @@
 
   // regimeEau (facultatif) : régime d'eau des radiateurs, id de D.REGIMES_EAU.
   // foyer (facultatif) : personnes du foyer, pour les occupants par défaut des pièces de vie.
-  // Isolation des murs propre à la pièce (isolationMurs « perso »), sinon celle du chantier.
-  function climatPiece(piece, climat) {
-    if (piece.isolationMurs !== 'perso') return climat;
-    return Object.assign({}, climat, {
-      isolantMur: piece.isolantMur || { materiau: 'aucun', epaisseur: '' },
-      positionIsolantMur: piece.positionIsolantMur || 'interieur'
+  // Ponts thermiques pondérés par la part de linéaire de chaque isolation de murs.
+  function pontsThermiquesMurs(piece, segments) {
+    var res = null;
+    segments.forEach(function (sg) {
+      var pt = pontsThermiques(piece, sg.climat);
+      if (!res) {
+        res = { isolation: pt.isolation, longueurs: pt.longueurs, detail: {}, total: 0 };
+        Object.keys(pt.detail).forEach(function (k) { res.detail[k] = 0; });
+      } else if (pt.isolation !== res.isolation && sg.f > 0) {
+        res.isolation = 'mixte';
+      }
+      Object.keys(pt.detail).forEach(function (k) { res.detail[k] += sg.f * pt.detail[k]; });
+      res.total += sg.f * pt.total;
     });
+    return res;
   }
 
-  function calculPiece(piece, climatChantier, regimeEau, foyer) {
-    var climat = climatPiece(piece, climatChantier);
+  function calculPiece(piece, climat, regimeEau, foyer) {
+    // Isolation des murs : celle du chantier, ou propre à la pièce (un ou plusieurs murs).
+    var segments = segmentsMurs(piece, climat);
+    segments.forEach(function (sg) { sg.uMur = uEnveloppe(sg.climat).mur; });
     var u = uEnveloppe(climat);
+    u.mur = 0;
+    segments.forEach(function (sg) { u.mur += sg.f * sg.uMur; });
     var s = surfacePiece(piece);
     var volume = s * num(piece.hauteur);
     var sousToiture = piece.sousToiture !== 'non';
@@ -543,7 +601,7 @@
     var smur = Math.max(lineaire * num(piece.hauteur) - (surfaceVitree - surfaceFenetresToit), 0);
     var surfaceToiture = Math.max(s - surfaceFenetresToit, 0);
     var debit = debitRetenu(piece, climat);
-    var pt = pontsThermiques(piece, climat);
+    var pt = pontsThermiquesMurs(piece, segments);
 
     var deperditions = {
       murs: u.mur * smur,
@@ -566,7 +624,7 @@
 
     var clim = climatisationPiece(piece, climat, foyer || D.CLIM.foyerDefaut, {
       u: { mur: u.mur, toiture: uToiture }, smur: smur, surface: s, surfaceToiture: surfaceToiture,
-      debit: debit, pontsThermiques: pt
+      debit: debit, pontsThermiques: pt, segments: segments
     });
 
     // Radiateurs : puissances catalogue (ΔT50) ramenées au régime d'eau de l'installation.
@@ -610,7 +668,10 @@
       G: G,
       tConfortHiver: num(tConfort),
       tConfortAuto: confortAuto,
-      isolationMursPerso: climat !== climatChantier,
+      isolationMursPerso: !segments[0].chantier || segments.length > 1,
+      mursIsolation: segments.map(function (sg) {
+        return { longueur: sg.longueur, f: sg.f, u: sg.uMur, chantier: sg.chantier, isolantMur: sg.climat.isolantMur, position: sg.climat.positionIsolantMur };
+      }),
       chauffageBase: chauffageBase,
       surpuissance: surpuissance,
       chauffage: chauffage,
@@ -744,7 +805,8 @@
     rIsolant: rIsolant,
     uParoi: uParoi,
     uEnveloppe: uEnveloppe,
-    climatPiece: climatPiece,
+    segmentsMurs: segmentsMurs,
+    mursIsolationPiece: mursIsolationPiece,
     epaisseurMur: epaisseurMur,
     rMur: rMur,
     plancherBas: plancherBas,

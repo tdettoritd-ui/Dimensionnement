@@ -115,7 +115,7 @@
   // Type d'isolation des murs (ponts thermiques), tel que renvoyé par Calc.isolationMur.
   var LIBELLES_ISOLATION = {
     non_isole: 'murs non isolés', iti: 'ITI', ite: 'ITE', itr: 'isolation répartie',
-    iti_itr: 'ITI sur isolation répartie', ite_itr: 'ITE sur isolation répartie'
+    iti_itr: 'ITI sur isolation répartie', ite_itr: 'ITE sur isolation répartie', mixte: 'isolations des murs différentes'
   };
 
   root.Fmt = {

@@ -566,3 +566,34 @@ test('isolation des murs propre à une pièce, sinon celle du chantier', () => {
   proche(ite.u.mur, 1 / (R(D.MURS, 'parpaing') + 0.14 / lambda('laine_verre')));
   assert.equal(ite.pontsThermiques.isolation, 'ite');
 });
+
+test('deux murs d\'une même pièce avec deux isolations différentes', () => {
+  const p = { longueur: '5', largeur: '4', hauteur: '2,5', mursExposes: '2', lineaire: '', sousToiture: 'non', vitrages: [] };
+  const nu = { materiau: 'aucun', epaisseur: '' };
+  const lv = { materiau: 'laine_verre', epaisseur: '10' };
+  const k = { ...climat, isolantMur: nu };
+  const uNu = 1 / R(D.MURS, 'parpaing');
+  const uLv = 1 / (R(D.MURS, 'parpaing') + 0.10 / lambda('laine_verre'));
+  // Mur de 5 m isolé en ITE, le reste (4 m) avec l'isolation du chantier (aucune).
+  const r = C.calculPiece({ ...p, isolationMurs: 'perso', mursIsolation: [{ longueur: '5', ...lv, position: 'exterieur' }] }, k);
+  assert.deepEqual(r.mursIsolation.map(m => [m.longueur, m.chantier]), [[5, false], [4, true]]);
+  proche(r.u.mur, (5 * uLv + 4 * uNu) / 9);
+  assert.equal(r.pontsThermiques.isolation, 'mixte');
+  // Ponts thermiques : moyenne pondérée des deux isolations.
+  const ptIte = C.calculPiece(p, { ...k, isolantMur: lv, positionIsolantMur: 'exterieur' }).pontsThermiques.total;
+  const ptNu = C.calculPiece(p, k).pontsThermiques.total;
+  proche(r.pontsThermiques.total, (5 * ptIte + 4 * ptNu) / 9);
+  // Deux murs saisis : le second sans longueur prend le reste.
+  const deux = C.calculPiece({ ...p, isolationMurs: 'perso', mursIsolation: [{ longueur: '5', ...lv }, { longueur: '', ...nu }] }, { ...climat });
+  assert.deepEqual(deux.mursIsolation.map(m => m.longueur), [5, 4]);
+  proche(deux.u.mur, (5 * uLv + 4 * uNu) / 9);
+  // Longueurs saisies > linéaire : ramenées au linéaire.
+  const trop = C.calculPiece({ ...p, isolationMurs: 'perso', mursIsolation: [{ longueur: '9', ...lv }, { longueur: '9', ...nu }] }, k);
+  proche(trop.mursIsolation.reduce((s, m) => s + m.longueur, 0), 9);
+  // Sans linéaire ni nombre de murs : le linéaire vient des longueurs des murs.
+  const sansL = C.calculPiece({ ...p, mursExposes: '', isolationMurs: 'perso', mursIsolation: [{ longueur: '3', ...lv }, { longueur: '2', ...nu }] }, k);
+  proche(sansL.lineaire, 5);
+  // Relevé antérieur : une seule isolation propre à la pièce, sur tout le linéaire.
+  const ancien = C.calculPiece({ ...p, isolationMurs: 'perso', isolantMur: lv, positionIsolantMur: 'interieur' }, k);
+  proche(ancien.u.mur, uLv);
+});

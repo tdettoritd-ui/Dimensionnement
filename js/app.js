@@ -82,8 +82,7 @@
       hauteur: '2,5',
       tConfortHiver: '',
       isolationMurs: 'chantier',
-      isolantMur: { materiau: 'aucun', epaisseur: '' },
-      positionIsolantMur: 'interieur',
+      mursIsolation: [],
       mursExposes: '',
       lineaire: '',
       sousToiture: 'oui',
@@ -97,6 +96,12 @@
       debit: '',
       radiateurs: []
     };
+  }
+
+  // Mur à isolation propre ; longueur vide : le reste du linéaire de la pièce.
+  function nouveauMurIsolation(climat) {
+    var iso = climat ? climat.isolantMur : { materiau: 'aucun', epaisseur: '' };
+    return { uid: uid(), longueur: '', materiau: iso.materiau, epaisseur: iso.epaisseur, position: climat ? climat.positionIsolantMur : 'interieur' };
   }
 
   function nouveauRadiateur() {
@@ -168,7 +173,10 @@
       var anciens = Array.isArray(p.radiateurs) ? p.radiateurs : (p.radiateur && p.radiateur.materiau ? [p.radiateur] : []);
       delete np.radiateur;
       np.radiateurs = anciens.map(function (r) { return Object.assign(nouveauRadiateur(), r, { uid: r.uid || uid() }); });
-      np.isolantMur = Object.assign({ materiau: 'aucun', epaisseur: '' }, p.isolantMur);
+      // Relevés antérieurs : une seule isolation propre à la pièce, devenue un mur sans longueur.
+      np.mursIsolation = C.mursIsolationPiece(p).map(function (m) { return Object.assign(nouveauMurIsolation(), m, { uid: m.uid || uid() }); });
+      delete np.isolantMur;
+      delete np.positionIsolantMur;
       np.vitrages = (p.vitrages || []).map(function (v) { return Object.assign(nouveauVitrage(), v); });
       np.vitrageRapide = Object.assign(nouvellePiece(1).vitrageRapide, p.vitrageRapide);
       if (!np.uid) np.uid = uid();
@@ -521,15 +529,24 @@
     var base = 'pieces.' + i;
     var html = bascule('Isolation des murs', base + '.isolationMurs', [['chantier', 'Celle du chantier'], ['perso', 'Différente']], { obligatoire: true, cls: 'span-2' });
     if (p.isolationMurs !== 'perso') return html;
-    var mat = p.isolantMur.materiau;
-    html += '<div class="field-pair span-2">' +
-      liste('Isolant murs de la pièce', base + '.isolantMur.materiau', table2options(D.ISOLANTS)) +
-      (mat && mat !== 'aucun' ? champ('Épaisseur', base + '.isolantMur.epaisseur', { kind: 'num', unite: 'cm', cls: 'narrow' }) : '') +
-      '</div>';
-    if (mat && mat !== 'aucun') {
-      html += bascule('Isolant posé', base + '.positionIsolantMur', [['interieur', 'Par l\'intérieur (ITI)'], ['exterieur', 'Par l\'extérieur (ITE)']], { obligatoire: true, cls: 'span-2' });
-    }
-    return html + '<p class="hint span-2" id="u-mur-' + p.uid + '"></p>';
+    p.mursIsolation.forEach(function (m, k) {
+      var b = base + '.mursIsolation.' + k;
+      var isole = m.materiau && m.materiau !== 'aucun';
+      html += '<div class="vitrage span-2">' +
+        '<div class="vitrage-head"><span>Mur ' + (k + 1) + '</span>' +
+        '<button type="button" class="btn ghost small danger" data-action="supprimer-mur-isolation" data-i="' + i + '" data-j="' + k + '" aria-label="Supprimer le mur ' + (k + 1) + '">Supprimer</button></div>' +
+        '<div class="grid">' +
+        champ('Longueur du mur', b + '.longueur', { kind: 'num', unite: 'ml', cls: 'span-2' }) +
+        '<div class="field-pair span-2">' +
+        liste('Isolant', b + '.materiau', table2options(D.ISOLANTS)) +
+        (isole ? champ('Épaisseur', b + '.epaisseur', { kind: 'num', unite: 'cm', cls: 'narrow' }) : '') +
+        '</div>' +
+        (isole ? bascule('Isolant posé', b + '.position', [['interieur', 'Par l\'intérieur (ITI)'], ['exterieur', 'Par l\'extérieur (ITE)']], { obligatoire: true, cls: 'span-2' }) : '') +
+        '</div><p class="hint" id="mur-iso-' + p.uid + '-' + k + '"></p></div>';
+    });
+    return html +
+      '<div class="span-2"><button type="button" class="btn small" data-action="ajouter-mur-isolation" data-i="' + i + '">+ Ajouter un mur</button></div>' +
+      '<p class="hint span-2" id="u-mur-' + p.uid + '"></p>';
   }
 
   function renderPiece(p, i) {
@@ -809,7 +826,15 @@
         : '');
       var input = document.querySelector('[data-bind="pieces.' + i + '.debit"]');
       if (input) input.placeholder = 'auto : ' + nf(r.debitEstime, 1);
-      setHTML('u-mur-' + p.uid, 'U mur de la pièce : ' + nf(r.u.mur, 2) + ' W/m².K (chantier : ' + nf(C.uEnveloppe(state.climat).mur, 2) + ').');
+      var restant = r.mursIsolation.filter(function (m) { return m.chantier; })[0];
+      setHTML('u-mur-' + p.uid, (restant && restant.longueur > 0 ? 'Reste ' + nf(restant.longueur, 2) + ' ml avec l\'isolation du chantier. ' : '') +
+        'U mur moyen de la pièce : ' + nf(r.u.mur, 2) + ' W/m².K (chantier : ' + nf(C.uEnveloppe(state.climat).mur, 2) + ').');
+      p.mursIsolation.forEach(function (m, k) {
+        var sg = r.mursIsolation[k];
+        var champLong = document.querySelector('[data-bind="pieces.' + i + '.mursIsolation.' + k + '.longueur"]');
+        if (champLong) champLong.placeholder = C.estVide(m.longueur) ? 'auto : ' + nf(sg ? sg.longueur : 0, 2) + ' (reste)' : '';
+        setHTML('mur-iso-' + p.uid + '-' + k, sg ? nf(sg.longueur, 2) + ' ml retenus · U ' + nf(sg.u, 2) + ' W/m².K' : '');
+      });
       var champConfort = document.querySelector('[data-bind="pieces.' + i + '.tConfortHiver"]');
       if (champConfort) champConfort.placeholder = 'auto : ' + nf(C.num(state.climat.tConfortHiver), 1);
       var champOcc = document.querySelector('[data-bind="pieces.' + i + '.occupants"]');
@@ -923,8 +948,7 @@
       var mi = /^pieces\.(\d+)\.isolationMurs$/.exec(path);
       if (mi && v === 'perso') {
         var pi = state.pieces[+mi[1]];
-        pi.isolantMur = JSON.parse(JSON.stringify(state.climat.isolantMur));
-        pi.positionIsolantMur = state.climat.positionIsolantMur;
+        if (!pi.mursIsolation.length) pi.mursIsolation = [nouveauMurIsolation(state.climat)];
       }
       // Passage à la saisie en m² : reprend la surface longueur × largeur déjà saisie.
       var m = /^pieces\.(\d+)\.saisieSurface$/.exec(path);
@@ -950,6 +974,7 @@
         copie.nom = p.nom + ' (copie)';
         copie.vitrages.forEach(function (v) { v.uid = uid(); });
         copie.radiateurs.forEach(function (r) { r.uid = uid(); });
+        copie.mursIsolation.forEach(function (m) { m.uid = uid(); });
         state.pieces.splice(i + 1, 0, copie);
         break;
       case 'supprimer-piece':
@@ -962,6 +987,13 @@
         return;
       case 'ajouter-vitrage':
         getPath(state, bt.dataset.base).vitrages.push(nouveauVitrage());
+        break;
+      case 'ajouter-mur-isolation':
+        p.mursIsolation.push(nouveauMurIsolation(state.climat));
+        break;
+      case 'supprimer-mur-isolation':
+        p.mursIsolation.splice(j, 1);
+        if (!p.mursIsolation.length) p.isolationMurs = 'chantier';
         break;
       case 'ajouter-radiateur':
         p.radiateurs.push(nouveauRadiateur());
