@@ -254,6 +254,33 @@ details.card[open] > summary .chev { transform: rotate(180deg); }
   line-height: 17px;
 }
 
+/* Sous-onglets : une entrée par pièce. */
+.subtabs { display: flex; flex-direction: column; gap: 2px; margin: 2px 0 4px 6px; padding-left: 4px; border-left: 2px solid var(--border); }
+.subtab {
+  display: block;
+  min-height: 36px;
+  padding: 6px 4px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: .66rem;
+  font-weight: 600;
+  line-height: 1.15;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
+}
+.subtab:hover { background: var(--surface-2); color: var(--text); }
+.subtab[aria-current="true"] { background: var(--surface); border-color: var(--accent); color: var(--accent); }
+.subtab:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.subtab.add { color: var(--accent); border: 1px dashed var(--border); text-align: center; }
+
 .tabs-suite { display: flex; justify-content: space-between; gap: 8px; }
 .tabs-suite .btn { min-width: 0; }
 
@@ -261,6 +288,8 @@ details.card[open] > summary .chev { transform: rotate(180deg); }
   .tabs { width: 180px; padding-left: 16px; }
   .tab { flex-direction: row; justify-content: flex-start; gap: 10px; min-height: 44px; padding: 10px 12px; font-size: .92rem; text-align: left; }
   .tab-badge { position: static; margin-left: auto; }
+  .subtabs { margin-left: 18px; padding-left: 8px; }
+  .subtab { font-size: .85rem; padding: 7px 10px; -webkit-line-clamp: 1; white-space: nowrap; text-overflow: ellipsis; display: block; }
   .layout > .app { padding-left: 16px; }
 }
 
@@ -363,10 +392,10 @@ select {
 .pieces-head { display: flex; align-items: baseline; justify-content: space-between; margin-top: 8px; }
 .pieces-head h2 { font-size: 1.15rem; }
 
-.piece-head { display: flex; align-items: center; gap: 4px; padding: 8px 8px 8px 4px; }
-.piece-name { font-weight: 650; font-size: 1.05rem; background: transparent; border-color: transparent; padding: 6px 8px; flex: 1; }
+.piece-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 8px 8px 8px 4px; }
+.piece-name { font-weight: 650; font-size: 1.05rem; background: transparent; border-color: transparent; padding: 6px 8px; flex: 1 1 140px; min-width: 0; }
 .piece-name:hover { border-color: var(--border); }
-.piece-chips { display: flex; gap: 4px; flex: none; }
+.piece-chips { display: flex; gap: 4px; flex: none; margin-left: auto; }
 .chip { font-size: .78rem; font-weight: 650; padding: 3px 7px; border-radius: 999px; font-variant-numeric: tabular-nums; }
 .chip.heat { background: var(--heat-soft); color: var(--heat); }
 .chip.cool { background: var(--cool-soft); color: var(--cool); }

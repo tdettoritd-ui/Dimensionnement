@@ -191,6 +191,7 @@
   var modifie = false;
   var ui = {
     onglet: lire(CLE_ONGLET, 'type'),
+    piece: null, // uid de la pièce affichée dans l'onglet Pièces
     replie: {},
     detail: {}
   };
@@ -631,13 +632,35 @@
     return o.id === 'pieces' && state.mode === 'global' ? 'Logement' : o.label;
   }
 
+  function parPiece() {
+    return state.mode !== 'global';
+  }
+
+  // Index de la pièce affichée : celle choisie, sinon la première.
+  function indexPiece() {
+    for (var k = 0; k < state.pieces.length; k++) if (state.pieces[k].uid === ui.piece) return k;
+    return state.pieces.length ? 0 : -1;
+  }
+
   function renderOnglets() {
     var actif = ongletActif().id;
     return ONGLETS.map(function (o) {
       var on = o.id === actif;
-      var badge = o.id === 'pieces' && state.mode !== 'global' ? '<span class="tab-badge">' + state.pieces.length + '</span>' : '';
-      return '<button type="button" role="tab" class="tab" data-onglet="' + o.id + '" aria-selected="' + on + '"' + (on ? '' : ' tabindex="-1"') + '>' +
+      var badge = o.id === 'pieces' && parPiece() ? '<span class="tab-badge">' + state.pieces.length + '</span>' : '';
+      var html = '<button type="button" role="tab" class="tab" data-onglet="' + o.id + '" aria-selected="' + on + '"' + (on ? '' : ' tabindex="-1"') + '>' +
         '<svg viewBox="0 0 24 24" aria-hidden="true">' + o.icone + '</svg><span>' + esc(libelleOnglet(o)) + '</span>' + badge + '</button>';
+      // Sous-onglets : une entrée par pièce, sous l'onglet Pièces ouvert.
+      if (o.id === 'pieces' && on && parPiece()) {
+        var courante = indexPiece();
+        html += '<div class="subtabs" role="group" aria-label="Pièces">' +
+          state.pieces.map(function (p, k) {
+            return '<button type="button" class="subtab" data-piece="' + esc(p.uid) + '" aria-current="' + (k === courante) + '">' +
+              '<span id="tab-nom-' + esc(p.uid) + '">' + esc(p.nom || 'Pièce ' + (k + 1)) + '</span></button>';
+          }).join('') +
+          '<button type="button" class="subtab add" data-action-nav="ajouter-piece" aria-label="Ajouter une pièce">+ Pièce</button>' +
+          '</div>';
+      }
+      return html;
     }).join('');
   }
 
@@ -648,11 +671,12 @@
       case 'installation': return renderInstallation();
       case 'prime': return renderPrime();
       case 'pieces':
-        return renderMode() + (state.mode === 'global'
-          ? renderGlobal()
-          : '<div class="pieces-head"><h2>Pièces</h2><span class="muted" id="nb-pieces"></span></div>' +
-            state.pieces.map(renderPiece).join('') +
-            '<button type="button" class="btn add-piece" data-action="ajouter-piece">+ Ajouter une pièce</button>');
+        if (!parPiece()) return renderMode() + renderGlobal();
+        var k = indexPiece();
+        return renderMode() +
+          '<div class="pieces-head"><h2>' + (k >= 0 ? 'Pièce ' + (k + 1) + ' / ' + state.pieces.length : 'Pièces') + '</h2><span class="muted" id="nb-pieces"></span></div>' +
+          (k >= 0 ? renderPiece(state.pieces[k], k) : '<p class="muted">Aucune pièce : en ajouter une.</p>') +
+          '<button type="button" class="btn add-piece" data-action="ajouter-piece">+ Ajouter une pièce</button>';
       default: return renderSysteme();
     }
   }
@@ -662,10 +686,23 @@
     var k = ONGLETS.indexOf(ongletActif());
     var prec = ONGLETS[k - 1];
     var suiv = ONGLETS[k + 1];
-    return '<div class="tabs-suite">' +
-      (prec ? '<button type="button" class="btn" data-onglet="' + prec.id + '">← ' + esc(libelleOnglet(prec)) + '</button>' : '<span></span>') +
-      (suiv ? '<button type="button" class="btn primary" data-onglet="' + suiv.id + '">' + esc(libelleOnglet(suiv)) + ' →</button>' : '') +
-      '</div>';
+    var bPrec = prec ? '<button type="button" class="btn" data-onglet="' + prec.id + '">← ' + esc(libelleOnglet(prec)) + '</button>' : '<span></span>';
+    var bSuiv = suiv ? '<button type="button" class="btn primary" data-onglet="' + suiv.id + '">' + esc(libelleOnglet(suiv)) + ' →</button>' : '';
+    // Onglet Pièces : on passe d'une pièce à l'autre avant de quitter l'onglet.
+    if (ongletActif().id === 'pieces' && parPiece()) {
+      var i = indexPiece();
+      var p = state.pieces[i - 1];
+      var n = state.pieces[i + 1];
+      if (p) bPrec = '<button type="button" class="btn" data-piece="' + esc(p.uid) + '">← ' + esc(p.nom) + '</button>';
+      bSuiv = n ? '<button type="button" class="btn primary" data-piece="' + esc(n.uid) + '">' + esc(n.nom) + ' →</button>' : '';
+    }
+    return '<div class="tabs-suite">' + bPrec + bSuiv + '</div>';
+  }
+
+  function changerPiece(id) {
+    ui.piece = id;
+    window.scrollTo(0, 0);
+    render();
   }
 
   function changerOnglet(id, focus) {
@@ -681,8 +718,11 @@
 
   var nav = document.getElementById('onglets');
   nav.addEventListener('click', function (e) {
-    var b = e.target.closest('[data-onglet]');
-    if (b) changerOnglet(b.dataset.onglet, false);
+    var b = e.target.closest('[data-onglet], [data-piece], [data-action-nav]');
+    if (!b) return;
+    if (b.dataset.onglet) changerOnglet(b.dataset.onglet, false);
+    else if (b.dataset.piece) changerPiece(b.dataset.piece);
+    else if (b.dataset.actionNav === 'ajouter-piece') ajouterPiece();
   });
   // Flèches haut / bas entre les onglets (rôle « tablist » vertical).
   nav.addEventListener('keydown', function (e) {
@@ -957,6 +997,8 @@
         ' W/K pour ' + nf(res.volume) + ' m³ chauffés'
       : '');
     setHTML('nb-pieces', state.pieces.length + (state.pieces.length > 1 ? ' pièces' : ' pièce'));
+    // Nom des sous-onglets, mis à jour pendant la saisie du nom de la pièce.
+    state.pieces.forEach(function (p, k) { setHTML('tab-nom-' + p.uid, esc(p.nom || 'Pièce ' + (k + 1))); });
 
     var anah = res.anah;
     setHTML('sub-prime-badge', badgeAnah(anah));
@@ -1027,6 +1069,7 @@
     if (!bt) return;
 
     if (bt.dataset.onglet) { changerOnglet(bt.dataset.onglet, false); return; }
+    if (bt.dataset.piece) { changerPiece(bt.dataset.piece); return; }
 
     if (bt.dataset.set) {
       var path = bt.dataset.set;
@@ -1057,8 +1100,8 @@
     var p = state.pieces[i];
     switch (bt.dataset.action) {
       case 'ajouter-piece':
-        state.pieces.push(nouvellePiece(state.pieces.length + 1));
-        break;
+        ajouterPiece();
+        return;
       case 'dupliquer-piece':
         var copie = JSON.parse(JSON.stringify(p));
         copie.uid = uid();
@@ -1067,10 +1110,14 @@
         copie.radiateurs.forEach(function (r) { r.uid = uid(); });
         copie.mursIsolation.forEach(function (m) { m.uid = uid(); });
         state.pieces.splice(i + 1, 0, copie);
+        ui.piece = copie.uid;
         break;
       case 'supprimer-piece':
         if (!confirm('Supprimer la pièce « ' + p.nom + ' » ?')) return;
         state.pieces.splice(i, 1);
+        // Affiche la pièce suivante (ou la précédente pour la dernière).
+        var voisine = state.pieces[Math.min(i, state.pieces.length - 1)];
+        ui.piece = voisine ? voisine.uid : null;
         break;
       case 'replier':
         ui.replie[p.uid] = !ui.replie[p.uid];
@@ -1172,6 +1219,7 @@
       state.id = c.id;
       modifie = false;
       ui.replie = {};
+      ui.piece = null;
       ui.detail = {};
       ecrire(CLE_BROUILLON, state);
       dlg.close();
@@ -1189,12 +1237,22 @@
     }
   });
 
+  function ajouterPiece() {
+    var np = nouvellePiece(state.pieces.length + 1);
+    state.pieces.push(np);
+    ui.piece = np.uid;
+    modification();
+    window.scrollTo(0, 0);
+    render();
+  }
+
   function nouveauReleve() {
     if (!confirm('Démarrer un nouveau relevé ?\nClient, installation, prime et pièces seront réinitialisés (les réglages climat / enveloppe sont conservés).' +
       (modifie ? '\n\nAttention : des modifications ne sont pas sauvegardées.' : ''))) return;
     state = nouveauChantier(JSON.parse(JSON.stringify(state.climat)), state.mode, state.systeme);
     modifie = false;
     ui.replie = {};
+    ui.piece = null;
     ui.detail = {};
     ecrire(CLE_BROUILLON, state);
     changerOnglet('type', false);
