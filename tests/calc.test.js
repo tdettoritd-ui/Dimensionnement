@@ -111,8 +111,11 @@ test('pièce hors toiture : U toiture = 0 ; débit saisi prioritaire', () => {
 });
 
 test('radiateurs existants', () => {
-  const t22 = D.find(D.RADIATEURS_ACIER, '22').wm2;
-  proche(C.radiateurExistant({ materiau: 'acier', typeAcier: '22', hauteur: '60', longueur: '100' }), t22 * 0.6 * 1);
+  // Acier type 22, 600 × 1000 mm : catalogue Altech (1 747 W à ΔT50).
+  proche(C.radiateurExistant({ materiau: 'acier', typeAcier: '22', hauteur: '60', longueur: '100' }), 1747, 2);
+  // Type hors catalogue : W/m² indicatif.
+  const t20 = D.find(D.RADIATEURS_ACIER, '20').wm2;
+  proche(C.radiateurExistant({ materiau: 'acier', typeAcier: '20', hauteur: '60', longueur: '100' }), t20 * 0.6 * 1);
   assert.equal(C.radiateurExistant({ materiau: 'fonte', hauteurElement: '600', elements: '10' }), D.RADIATEURS_ELEMENTS.fonte[600] * 10);
   assert.equal(C.radiateurExistant({ materiau: 'alu', hauteurElement: 700, elements: '8' }), D.RADIATEURS_ELEMENTS.alu[700] * 8);
   assert.equal(C.radiateurExistant({ materiau: '' }), null);
@@ -194,7 +197,7 @@ test('cohérence des tables de référence', () => {
   D.ACTIVITES.forEach(a => assert.ok(a.lat > 0, a.id));
   D.MURS.forEach(m => assert.ok(m.inertie, m.id));
   // Paliers strictement croissants.
-  [D.PALIERS_PAC, D.PALIERS_RADIATEUR].forEach(p => p.forEach((v, i) => i && assert.ok(v > p[i - 1])));
+  [D.PALIERS_PAC].forEach(p => p.forEach((v, i) => i && assert.ok(v > p[i - 1])));
   // Seuils Anah croissants pour chaque taille de foyer.
   ['hors_idf', 'idf'].forEach(z => D.ANAH[z].seuils.forEach(s => assert.ok(s[0] < s[1] && s[1] < s[2])));
 });
@@ -227,7 +230,8 @@ test('régime d\'eau : correction des puissances de radiateurs', () => {
   proche(pac.radiateurExistant.puissance, catalogue * C.facteurRegime('45/35', '20'));
   assert.equal(pac.radiateurExistant.suffisant, catalogue * C.facteurRegime('45/35', '20') >= 0.95 * 119);
   // Radiateur neuf : palier catalogue couvrant le besoin au régime choisi.
-  assert.equal(pac.radiateurNeuf.valeur, D.PALIERS_RADIATEUR.find(p => p * C.facteurRegime('45/35', '20') >= 119));
+  const besoin50 = 119 / C.facteurRegime('45/35', '20');
+  assert.equal(pac.radiateurNeuf.valeur, Math.min(...D.CATALOGUE_RADIATEURS.modeles.map(m => m.p50).filter(p => p >= besoin50)));
   // Le régime est lu dans l'installation par calculChantier.
   const r = C.calculChantier({ climat: sansPlancher, prime: {}, installation: { regimeEau: '45/35' }, pieces: [piece] });
   proche(r.pieces[0].radiateurExistant.puissance, pac.radiateurExistant.puissance);
@@ -609,4 +613,40 @@ test('température de sortie d\'eau : 35 à 60 °C par pas de 5, type de PAC ind
   const f = D.REGIMES_EAU.map(r => C.facteurRegime(r.id, '20'));
   f.slice(1).forEach((x, k) => assert.ok(x > f[k]));
   assert.ok(f[f.length - 1] < 1);
+});
+
+test('catalogue Altech : radiateurs neufs et existants acier', () => {
+  const M = D.CATALOGUE_RADIATEURS.modeles;
+  assert.equal(M.length, 112);
+  // Cohérence de la saisie : puissance proportionnelle à la largeur (±3 %) et ΔT30 ≈ 0,51 × ΔT50.
+  const groupes = {};
+  M.forEach(m => { (groupes[m.type + '-' + m.hauteur] = groupes[m.type + '-' + m.hauteur] || []).push(m); });
+  Object.values(groupes).forEach(g => {
+    const moy = g.reduce((s, m) => s + m.p50 / m.largeur, 0) / g.length;
+    g.forEach(m => assert.ok(Math.abs(m.p50 / m.largeur / moy - 1) < 0.03, m.ref));
+  });
+  M.forEach(m => assert.ok(m.p30 / m.p50 > 0.49 && m.p30 / m.p50 < 0.53, m.ref));
+  // Exposant n déduit de ΔT30 / ΔT50 ≈ celui du calcul (1,3).
+  const n = Math.log(1747 / 879) / Math.log(50 / 30);
+  assert.ok(Math.abs(n - D.EXPOSANT_RADIATEUR) < 0.06);
+  // Existant : catalogue exact à la cote, interpolé entre hauteurs.
+  proche(C.wParMetreCatalogue('11', 600), 1014, 2);
+  const w650 = C.wParMetreCatalogue('22', 650);
+  assert.ok(w650 > C.wParMetreCatalogue('22', 600) && w650 < C.wParMetreCatalogue('22', 700));
+  assert.equal(C.wParMetreCatalogue('10', 600), null);
+  // Neuf : le moins puissant couvrant le besoin ; hauteur imposée ; plusieurs au-delà du plus puissant.
+  const r = C.radiateurNeuf(1500);
+  assert.equal(r.modele.p50, Math.min(...M.map(m => m.p50).filter(p => p >= 1500)));
+  assert.equal(r.nombre, 1);
+  const h = C.radiateurNeuf(1500, '600');
+  assert.equal(h.modele.hauteur, 600);
+  assert.ok(h.modele.p50 >= 1500);
+  const gros = C.radiateurNeuf(6000);
+  assert.equal(gros.nombre, 2);
+  assert.ok(gros.modele.p50 * 2 >= 6000);
+  assert.equal(C.radiateurNeuf(0).valeur, null);
+  // Hauteur lue dans l'installation par calculChantier.
+  const piece = { longueur: '5', largeur: '4', hauteur: '2,5', lineaire: '9', sousToiture: 'oui', vitrages: [] };
+  const ch = C.calculChantier({ climat, prime: {}, installation: { regimeEau: '45/35', hauteurRadiateur: '500' }, pieces: [piece] });
+  assert.equal(ch.pieces[0].radiateurNeuf.modele.hauteur, 500);
 });

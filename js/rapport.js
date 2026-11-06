@@ -260,8 +260,9 @@
         ['Distance UE ↔ tableau', F.avecUnite(ins.distUeTableau, 'm')],
         ['Distance UI ↔ tableau', F.avecUnite(ins.distUiTableau, 'm')],
         ['Condensats à proximité', F.texteOuiNon(ins.condensats)],
-        ['Sortie d\'eau PAC', ins.regimeEau ? F.libelle(D.REGIMES_EAU, ins.regimeEau) : '']
-      ].filter(function (l) { return !(airAir && /^(Ballon tampon|ECS|Sortie d)/.test(l[0])); })]
+        ['Sortie d\'eau PAC', ins.regimeEau ? F.libelle(D.REGIMES_EAU, ins.regimeEau) : ''],
+        ['Hauteur radiateurs neufs', C.estVide(ins.hauteurRadiateur) ? 'Toutes' : ins.hauteurRadiateur + ' mm']
+      ].filter(function (l) { return !(airAir && /^(Ballon tampon|ECS|Sortie d|Hauteur rad)/.test(l[0])); })]
     );
 
     // Pièces calculées : celles du relevé, ou les niveaux du mode global (logement saisi d'un bloc).
@@ -299,7 +300,7 @@
       var ex = r.radiateurExistant;
       return [
         t(p.nom), t(F.nf(r.surface, 1) + ' m²'), t(F.W(r.chauffage)), t(F.W(r.climatisation)),
-        t(global ? '—' : F.textePalierSplit(r.palierSplit)), t(global ? '—' : F.textePalierRadiateur(r.radiateurNeuf)),
+        t(global ? '—' : F.textePalierSplit(r.palierSplit)), t(global ? '—' : F.textePalierRadiateur(r.radiateurNeuf, true)),
         t(ex ? F.W(ex.puissance) + (ex.suffisant ? ' – suffisant' : ' – insuffisant') : '—')
       ].slice(0, colonnes);
     });
@@ -371,7 +372,7 @@
           F.W(r.chauffageBase) + ' + relance ' + F.nf(r.surpuissance) + ' %' +
           (r.tConfortAuto ? '' : ' · confort ' + F.nf(r.tConfortHiver, 1) + ' °C (propre à la pièce)')],
         ['Radiateur neuf préconisé', F.textePalierRadiateur(r.radiateurNeuf) +
-          (r.facteurRegime !== 1 && r.radiateurNeuf.valeur ? ' (catalogue ΔT50, régime ' + ins.regimeEau + ' °C)' : '')],
+          (r.facteurRegime !== 1 && r.radiateurNeuf.valeur ? ', soit ' + F.W(r.radiateurNeuf.valeur * r.facteurRegime) + ' en ' + ins.regimeEau + ' °C' : '')],
         ['Radiateurs existants', F.texteRadiateurExistant(p, r, ins.regimeEau)]
       ].filter(function (l) { return !((p.virtuel || airAir) && /^Radiateur/.test(l[0])) && !(l[0] === 'Isolation des murs' && !l[1]); })
         .map(function (l) { return [t(l[0]), t(l[1])]; });
@@ -396,7 +397,8 @@
 
     /* --- Mentions --- */
     var mentions = 'Dimensionnement indicatif établi par méthode simplifiée à partir des relevés effectués sur place. ' +
-      (airAir ? '' : 'Puissances des radiateurs existants : valeurs indicatives à ΔT50, à recouper avec la documentation du fabricant. ') +
+      (airAir ? '' : 'Radiateurs neufs et radiateurs acier types 11, 21, 22, 33 : puissances ΔT50 du catalogue ' + D.CATALOGUE_RADIATEURS.source + ' (EN 442) ; ' +
+        'autres radiateurs existants : valeurs indicatives, à recouper avec la documentation du fabricant. ') +
       'Plafonds Anah ' + D.ANAH.annee + ' : à vérifier lors du dépôt du dossier. Document établi le ' + new Date().toLocaleDateString('fr-FR') + '.';
     police(doc, 7.5, false, GRIS);
     var lignesMentions = doc.splitTextToSize(t(mentions), UTILE);

@@ -48,9 +48,15 @@
     return p.valeur === null ? '—' : nf(p.valeur, p.valeur % 1 ? 1 : 0) + ' kW';
   }
 
-  function textePalierRadiateur(p) {
+  // Radiateur neuf du catalogue ; court : pour une colonne de tableau.
+  function textePalierRadiateur(p, court) {
     if (p.depasse) return 'Plusieurs émetteurs';
-    return p.valeur === null ? '—' : W(p.valeur);
+    if (p.valeur === null) return '—';
+    if (!p.modele) return W(p.valeur);
+    var m = p.modele;
+    var n = p.nombre > 1 ? p.nombre + ' × ' : '';
+    if (court) return n + 'T' + m.type + ' ' + m.hauteur + '×' + m.largeur;
+    return n + 'Type ' + m.type + ' · H ' + m.hauteur + ' × L ' + m.largeur + ' mm – ' + W(m.p50) + (p.nombre > 1 ? ' chacun' : '') + ' (ΔT50) · réf. ' + m.ref;
   }
 
   function dateFr(iso) {

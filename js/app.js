@@ -142,7 +142,8 @@
         ballonTampon: '', volumeTampon: '', ecsPac: '', ballonThermo: '', ecsEmplacement: '',
         electrique: '', regulation: '', miniTableau: '',
         distUiUe: '', distUeTableau: '', distUiTableau: '', condensats: '',
-        regimeEau: '55/45'
+        regimeEau: '55/45',
+        hauteurRadiateur: ''
       },
       prime: { personnes: '', rfr: '', zone: 'hors_idf' },
       pieces: [nouvellePiece(1)]
@@ -377,6 +378,12 @@
       })() +
       '<p class="hint">Sert à vérifier les radiateurs existants et à choisir les neufs : les puissances catalogue sont données à ΔT50 (eau à 75 °C).</p>' +
       '<div class="grid">' +
+      liste('Hauteur des radiateurs neufs', 'installation.hauteurRadiateur', D.HAUTEURS_RADIATEUR_NEUF.map(function (h) { return { value: String(h), label: h + ' mm' }; }),
+        { vide: 'Toutes hauteurs', cls: 'span-2' }) +
+      '</div>' +
+      '<p class="hint">Radiateur neuf choisi dans le catalogue ' + esc(D.CATALOGUE_RADIATEURS.source) + ' (panneaux acier types 11, 21, 22, 33) : le moins puissant qui couvre le besoin de la pièce. ' +
+      'Fixer une hauteur sous une fenêtre, par exemple.</p>' +
+      '<div class="grid">' +
       bascule('Ballon tampon', 'installation.ballonTampon') +
       (i.ballonTampon === 'oui' ? champ('Volume du ballon tampon', 'installation.volumeTampon', { kind: 'num', unite: 'L' }) : '<div class="spacer"></div>') +
       bascule('ECS produite par la PAC ?', 'installation.ecsPac') +
@@ -509,7 +516,9 @@
       '<div class="grid">' +
       liste('Matériau', base + '.materiau', table2options(D.MATERIAUX_RADIATEUR), { cls: 'span-2' });
     if (r.materiau === 'acier') {
-      html += liste('Type', base + '.typeAcier', D.RADIATEURS_ACIER.map(function (t) { return { value: t.id, label: t.label + ' (' + nf(t.wm2) + ' W/m²)' }; }), { cls: 'span-2' }) +
+      html += liste('Type', base + '.typeAcier', D.RADIATEURS_ACIER.map(function (t) {
+        return { value: t.id, label: t.label + (C.wParMetreCatalogue(t.id, 600) !== null ? ' (catalogue ' + D.CATALOGUE_RADIATEURS.source + ')' : ' (≈ ' + nf(t.wm2) + ' W/m²)') };
+      }), { cls: 'span-2' }) +
         champ('Hauteur', base + '.hauteur', { kind: 'num', unite: 'cm' }) +
         champ('Longueur', base + '.longueur', { kind: 'num', unite: 'cm' });
     } else if (r.materiau) {
@@ -527,7 +536,8 @@
     if (p.radiateurs.length) {
       html += '<div class="radex" id="radex-' + p.uid + '"></div>' +
         '<p class="hint">Puissance ramenée au régime d\'eau ' + F.esc(state.installation.regimeEau) + ' °C (réglage dans « Installation »).</p>' +
-        '<p class="hint warn">Valeurs catalogue indicatives ΔT50 (ordre de grandeur, non certifiées) : à recouper avec la documentation constructeur.</p>';
+        '<p class="hint warn">Acier types 11, 21, 22 et 33 : puissances ΔT50 du catalogue ' + D.CATALOGUE_RADIATEURS.source + ' (EN 442). ' +
+        'Autres types, fonte et aluminium : ordres de grandeur, à recouper avec la documentation du fabricant.</p>';
     }
     return html;
   }
@@ -782,8 +792,10 @@
       '</div>' +
       '<div class="reco"><span>Split préconisé (unité intérieure)</span><strong>' + textePalierSplit(r.palierSplit) + '</strong></div>' +
       (airAir() ? '' :
-        '<div class="reco"><span>Radiateur neuf préconisé</span><strong>' + textePalierRadiateur(r.radiateurNeuf) + '</strong>' +
-        (r.facteurRegime !== 1 ? '<small class="reco-note">puissance catalogue ΔT50, pour un régime ' + F.esc(state.installation.regimeEau) + ' °C</small>' : '') +
+        '<div class="reco"><span>Radiateur neuf préconisé (' + esc(D.CATALOGUE_RADIATEURS.source) + ')</span><strong>' + textePalierRadiateur(r.radiateurNeuf) + '</strong>' +
+        (r.radiateurNeuf.valeur && r.facteurRegime !== 1
+          ? '<small class="reco-note">soit ' + W(r.radiateurNeuf.valeur * r.facteurRegime) + ' avec une sortie d\'eau à ' + F.esc(String(state.installation.regimeEau).split('/')[0]) + ' °C, pour un besoin de ' + W(r.chauffage) + '</small>'
+          : '') +
         '</div>') +
       '<details class="detail" data-key="detail"><summary>Détail du calcul</summary>' +
       '<table class="mini"><tbody>' +

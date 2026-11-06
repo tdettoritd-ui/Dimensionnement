@@ -244,12 +244,50 @@
     return { valeur: null, depasse: true };
   }
 
+  // Puissance ΔT50 par mètre de largeur d'un type du catalogue, pour une hauteur (mm) :
+  // moyenne des modèles de cette hauteur, interpolée (ou prolongée) entre les hauteurs voisines.
+  function wParMetreCatalogue(type, hauteur) {
+    var parHauteur = {};
+    D.CATALOGUE_RADIATEURS.modeles.forEach(function (m) {
+      if (m.type !== type) return;
+      (parHauteur[m.hauteur] = parHauteur[m.hauteur] || []).push(m.p50 / (m.largeur / 1000));
+    });
+    var hs = Object.keys(parHauteur).map(Number).sort(function (a, b) { return a - b; });
+    if (!hs.length) return null;
+    var w = function (h) { var v = parHauteur[h]; return v.reduce(function (s, x) { return s + x; }, 0) / v.length; };
+    if (hs.length === 1) return w(hs[0]) * hauteur / hs[0];
+    var k = 1;
+    while (k < hs.length - 1 && hauteur > hs[k]) k++;
+    var h0 = hs[k - 1], h1 = hs[k];
+    return Math.max(w(h0) + (w(h1) - w(h0)) * (hauteur - h0) / (h1 - h0), 0);
+  }
+
+  // Radiateur neuf du catalogue : le moins puissant couvrant le besoin ΔT50, à la hauteur souhaitée
+  // (toutes sinon) ; au-delà du plus puissant, plusieurs radiateurs identiques.
+  function radiateurNeuf(besoin50, hauteur) {
+    if (!(besoin50 > 0)) return { valeur: null, depasse: false };
+    var modeles = D.CATALOGUE_RADIATEURS.modeles;
+    var choix = modeles.filter(function (m) { return m.hauteur === num(hauteur); });
+    if (!choix.length) choix = modeles;
+    var plusPuissant = Math.max.apply(null, choix.map(function (m) { return m.p50; }));
+    var nombre = Math.ceil(besoin50 / plusPuissant - 1e-9);
+    var unitaire = besoin50 / nombre;
+    var retenu = null;
+    choix.forEach(function (m) {
+      if (m.p50 < unitaire - 1e-9) return;
+      if (!retenu || m.p50 < retenu.p50 || (m.p50 === retenu.p50 && m.largeur < retenu.largeur)) retenu = m;
+    });
+    return { valeur: retenu.p50 * nombre, depasse: false, nombre: nombre, modele: retenu };
+  }
+
   function radiateurExistant(radiateur) {
     if (!radiateur || !radiateur.materiau) return null;
     var puissance = 0;
     if (radiateur.materiau === 'acier') {
       var t = D.find(D.RADIATEURS_ACIER, radiateur.typeAcier);
-      if (t) puissance = t.wm2 * (num(radiateur.hauteur) / 100) * (num(radiateur.longueur) / 100);
+      var wm = wParMetreCatalogue(radiateur.typeAcier, num(radiateur.hauteur) * 10);
+      if (wm !== null) puissance = wm * num(radiateur.longueur) / 100;
+      else if (t) puissance = t.wm2 * (num(radiateur.hauteur) / 100) * (num(radiateur.longueur) / 100);
     } else {
       var table = D.RADIATEURS_ELEMENTS[radiateur.materiau];
       var parElement = table ? table[radiateur.hauteurElement] : 0;
@@ -572,7 +610,8 @@
     return res;
   }
 
-  function calculPiece(piece, climat, regimeEau, foyer) {
+  // hauteurRadiateur (facultatif) : hauteur souhaitée des radiateurs neufs (mm), vide = toutes.
+  function calculPiece(piece, climat, regimeEau, foyer, hauteurRadiateur) {
     // Isolation des murs : celle du chantier, ou propre à la pièce (un ou plusieurs murs).
     var segments = segmentsMurs(piece, climat);
     segments.forEach(function (sg) { sg.uMur = uEnveloppe(sg.climat).mur; });
@@ -682,7 +721,7 @@
       palierSplit: palier(clim.nominale / 1000, D.PALIERS_SPLIT),
       facteurRegime: facteur,
       // Palier catalogue (ΔT50) dont la puissance au régime d'eau couvre le besoin.
-      radiateurNeuf: facteur > 0 ? palier(chauffage / facteur, D.PALIERS_RADIATEUR) : { valeur: null, depasse: chauffage > 0 },
+      radiateurNeuf: facteur > 0 ? radiateurNeuf(chauffage / facteur, hauteurRadiateur) : { valeur: null, depasse: chauffage > 0 },
       radiateurExistant: radiateur
     };
   }
@@ -701,7 +740,8 @@
     // Pièces calculées : celles du relevé, ou les niveaux virtuels du mode global.
     var sources = global ? piecesGlobales(chantier.global, foyer.n) : (chantier.pieces || []);
     if (airAir) sources = sources.map(function (p) { return Object.assign({}, p, { radiateur: null, radiateurs: [] }); });
-    var pieces = sources.map(function (p) { return calculPiece(p, chantier.climat, regimeEau, foyer.n); });
+    var hauteurRadiateur = chantier.installation ? chantier.installation.hauteurRadiateur : '';
+    var pieces = sources.map(function (p) { return calculPiece(p, chantier.climat, regimeEau, foyer.n, hauteurRadiateur); });
     var K = D.CLIM;
     var chauffage = 0;
     var deperditionsTotales = 0;
@@ -814,6 +854,8 @@
     debitEstime: debitEstime,
     palier: palier,
     radiateurExistant: radiateurExistant,
+    radiateurNeuf: radiateurNeuf,
+    wParMetreCatalogue: wParMetreCatalogue,
     radiateursPiece: radiateursPiece,
     facteurRegime: facteurRegime,
     isolationMur: isolationMur,
