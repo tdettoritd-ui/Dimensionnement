@@ -260,8 +260,8 @@
         ['Distance UE ↔ tableau', F.avecUnite(ins.distUeTableau, 'm')],
         ['Distance UI ↔ tableau', F.avecUnite(ins.distUiTableau, 'm')],
         ['Condensats à proximité', F.texteOuiNon(ins.condensats)],
-        ['Régime d\'eau radiateurs', ins.regimeEau ? F.libelle(D.REGIMES_EAU, ins.regimeEau) : '']
-      ].filter(function (l) { return !(airAir && /^(Ballon tampon|ECS|Régime)/.test(l[0])); })]
+        ['Sortie d\'eau PAC', ins.regimeEau ? F.libelle(D.REGIMES_EAU, ins.regimeEau) : '']
+      ].filter(function (l) { return !(airAir && /^(Ballon tampon|ECS|Sortie d)/.test(l[0])); })]
     );
 
     // Pièces calculées : celles du relevé, ou les niveaux du mode global (logement saisi d'un bloc).

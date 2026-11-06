@@ -265,14 +265,19 @@
 
   // Régimes d'eau (départ / retour, °C). Les puissances catalogue des radiateurs sont données à ΔT50
   // (75/65 °C pour 20 °C ambiant) ; à plus basse température, elles sont corrigées (voir calc.js).
+  // Température de sortie d'eau de la PAC, de 35 à 60 °C, et type de PAC correspondant.
+  // id « départ/retour » : retour 10 K sous le départ (5 K en très basse température).
   var REGIMES_EAU = [
-    { id: '75/65', label: '75/65 °C – référence catalogue ΔT50 (chaudière)', depart: 75, retour: 65 },
-    { id: '70/60', label: '70/60 °C – chaudière', depart: 70, retour: 60 },
-    { id: '65/55', label: '65/55 °C – PAC très haute température', depart: 65, retour: 55 },
-    { id: '55/45', label: '55/45 °C – PAC haute température', depart: 55, retour: 45 },
-    { id: '50/40', label: '50/40 °C – PAC moyenne température', depart: 50, retour: 40 },
-    { id: '45/35', label: '45/35 °C – PAC basse température', depart: 45, retour: 35 }
+    { id: '35/30', depart: 35, retour: 30, type: 'PAC basse température (plancher chauffant)' },
+    { id: '40/35', depart: 40, retour: 35, type: 'PAC basse température' },
+    { id: '45/35', depart: 45, retour: 35, type: 'PAC basse température' },
+    { id: '50/40', depart: 50, retour: 40, type: 'PAC moyenne température' },
+    { id: '55/45', depart: 55, retour: 45, type: 'PAC haute température' },
+    { id: '60/50', depart: 60, retour: 50, type: 'PAC haute température' }
   ];
+  REGIMES_EAU.forEach(function (r) { r.label = r.depart + ' °C – ' + r.type + ' (retour ' + r.retour + ' °C)'; });
+  // Relevés antérieurs : régimes au-delà de 60 °C ramenés à 60 °C.
+  var REGIMES_EAU_ANCIENS = { '65/55': '60/50', '70/60': '60/50', '75/65': '60/50' };
 
   // Exposant de la loi d'émission des radiateurs (EN 442) : P = P50 × (ΔTlm / ΔTlm50)^n.
   var EXPOSANT_RADIATEUR = 1.3;
@@ -353,6 +358,7 @@
     RADIATEURS_ELEMENTS: RADIATEURS_ELEMENTS,
     MATERIAUX_RADIATEUR: MATERIAUX_RADIATEUR,
     REGIMES_EAU: REGIMES_EAU,
+    REGIMES_EAU_ANCIENS: REGIMES_EAU_ANCIENS,
     EXPOSANT_RADIATEUR: EXPOSANT_RADIATEUR,
     HAUTEURS_ELEMENT: HAUTEURS_ELEMENT,
     ANAH: ANAH,

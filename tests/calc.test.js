@@ -597,3 +597,16 @@ test('deux murs d\'une même pièce avec deux isolations différentes', () => {
   const ancien = C.calculPiece({ ...p, isolationMurs: 'perso', isolantMur: lv, positionIsolantMur: 'interieur' }, k);
   proche(ancien.u.mur, uLv);
 });
+
+test('température de sortie d\'eau : 35 à 60 °C par pas de 5, type de PAC indiqué', () => {
+  assert.deepEqual(D.REGIMES_EAU.map(r => r.depart), [35, 40, 45, 50, 55, 60]);
+  D.REGIMES_EAU.forEach(r => {
+    assert.equal(r.id, r.depart + '/' + r.retour);
+    assert.ok(/^PAC /.test(r.type), r.id);
+    assert.ok(r.label.indexOf(r.type) >= 0);
+  });
+  // Plus l'eau est chaude, plus un radiateur donné émet.
+  const f = D.REGIMES_EAU.map(r => C.facteurRegime(r.id, '20'));
+  f.slice(1).forEach((x, k) => assert.ok(x > f[k]));
+  assert.ok(f[f.length - 1] < 1);
+});

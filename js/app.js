@@ -153,6 +153,7 @@
     var base = nouveauChantier();
     var out = Object.assign({}, base, c);
     ['client', 'installation', 'prime'].forEach(function (k) { out[k] = Object.assign({}, base[k], c[k]); });
+    if (D.REGIMES_EAU_ANCIENS[out.installation.regimeEau]) out.installation.regimeEau = D.REGIMES_EAU_ANCIENS[out.installation.regimeEau];
     out.climat = Object.assign(climatDefaut(), c.climat);
     // Relevés antérieurs : ancien choix unique du plancher bas.
     var ancien = c.climat && D.PLANCHERS_ANCIENS[c.climat.plancherType];
@@ -365,8 +366,14 @@
     // Air/air : ni circuit d'eau (régime, ballon tampon) ni production d'ECS.
     var circuitEau = airAir() ? '' :
       '<div class="grid">' +
-      liste('Régime d\'eau des radiateurs', 'installation.regimeEau', table2options(D.REGIMES_EAU), { cls: 'span-2' }) +
+      liste('Température de sortie d\'eau', 'installation.regimeEau', D.REGIMES_EAU.map(function (r) {
+        return { value: r.id, label: r.depart + ' °C – ' + r.type };
+      }), { cls: 'span-2' }) +
       '</div>' +
+      (function () {
+        var r = D.find(D.REGIMES_EAU, i.regimeEau);
+        return r ? '<p class="reco-note"><strong>' + esc(r.type) + '</strong> · départ ' + r.depart + ' °C, retour ' + r.retour + ' °C</p>' : '';
+      })() +
       '<p class="hint">Sert à vérifier les radiateurs existants et à choisir les neufs : les puissances catalogue sont données à ΔT50 (eau à 75 °C).</p>' +
       '<div class="grid">' +
       bascule('Ballon tampon', 'installation.ballonTampon') +
