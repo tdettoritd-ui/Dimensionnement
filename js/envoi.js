@@ -11,6 +11,7 @@
 
   var fichier = null;
   var etat = null;
+  var version = 'client';
 
   function partageFichiersPossible() {
     try {
@@ -79,6 +80,11 @@
       '<div class="field span-2"><label class="lbl" for="env-message">Message</label>' +
       '<textarea id="env-message" rows="10">' + F.esc(message(state)) + '</textarea></div>' +
       '</div>' +
+      '<div class="field"><span class="lbl">PDF joint</span><div class="seg" role="group" aria-label="PDF joint">' +
+      ['client', 'interne'].map(function (v) {
+        return '<button type="button" data-version="' + v + '" aria-pressed="' + (v === version) + '" class="' + (v === version ? 'on' : '') + '">' +
+          (v === 'client' ? 'Client' : 'Détaillé (interne)') + '</button>';
+      }).join('') + '</div></div>' +
       '<p class="hint" id="env-statut" role="status"></p>' +
       '<div class="envoi-actions">' +
       (partage ? '<button type="button" class="btn primary" id="env-partager" disabled>Partager le PDF…</button>' : '') +
@@ -91,9 +97,16 @@
         : '« Ouvrir ma messagerie » télécharge le PDF puis prépare l\'email : joignez-y le PDF téléchargé.') + '</p>';
 
     dlg.showModal();
+    preparer(state);
+  }
+
+  function preparer(state) {
+    fichier = null;
+    boutonsPdf(false);
     statut('Préparation du PDF…');
-    root.Rapport.generer(state).then(function (f) {
-      if (etat !== state) return;
+    var v = version;
+    root.Rapport.generer(state, v).then(function (f) {
+      if (etat !== state || v !== version) return;
       fichier = f;
       statut('PDF prêt : ' + f.nom);
       boutonsPdf(true);
@@ -138,6 +151,16 @@
       if (e.target === dlg || e.target.closest('[data-close]')) { dlg.close(); return; }
       var bt = e.target.closest('button');
       if (!bt) return;
+      if (bt.dataset.version) {
+        version = bt.dataset.version;
+        dlg.querySelectorAll('[data-version]').forEach(function (b) {
+          var on = b.dataset.version === version;
+          b.classList.toggle('on', on);
+          b.setAttribute('aria-pressed', on);
+        });
+        if (etat) preparer(etat);
+        return;
+      }
       if (bt.id === 'env-partager') partager();
       else if (bt.id === 'env-mail') ouvrirMessagerie();
       else if (bt.id === 'env-pdf' && fichier) root.Rapport.telecharger(fichier);

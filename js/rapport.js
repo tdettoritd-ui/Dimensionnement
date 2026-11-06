@@ -59,8 +59,14 @@
       })
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       .replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-    return ['Releve', client || 'client', state.client.date].filter(Boolean).join('_') + '.pdf';
+    return ['Releve', client || 'client', state.client.date].filter(Boolean).join('_');
   }
+
+  // Versions du compte rendu : « client » (résultats, sans le détail des calculs) ou « interne » (complet).
+  var VERSIONS = {
+    client: { suffixe: 'client', libelle: 'PDF client' },
+    interne: { suffixe: 'detail', libelle: 'PDF détaillé (interne)' }
+  };
 
   function sommeListe(liste, f) {
     var t = 0;
@@ -81,7 +87,8 @@
     return v === '' || v == null ? '—' : v;
   }
 
-  function construire(state, ent, logo) {
+  function construire(state, ent, logo, version) {
+    var interne = version !== 'client';
     var doc = new root.jspdf.jsPDF({ unit: 'mm', format: 'a4' });
     var LARG = doc.internal.pageSize.getWidth();
     var HAUT = doc.internal.pageSize.getHeight();
@@ -178,7 +185,7 @@
     doc.line(MARGE, y, LARG - MARGE, y);
     y += 7;
     police(doc, 15, true, BLEU);
-    doc.text(t(airAir ? 'Relevé technique – PAC air/air / Climatisation' : 'Relevé technique – PAC air/eau'), MARGE, y);
+    doc.text(t((interne ? 'Relevé technique' : 'Étude de dimensionnement') + (airAir ? ' – PAC air/air / Climatisation' : ' – PAC air/eau')), MARGE, y);
     y += 6;
     police(doc, 9.5, false, TEXTE);
     var sousTitre = [
@@ -195,7 +202,7 @@
       { titre: 'Coefficient G estimé', valeur: F.nf(res.coefficientG, 2) + ' W/m³.K',
         detail: 'GV ' + F.nf(res.deperditionsTotales) + ' W/K · ' + F.nf(res.volume) + ' m³', rgb: BLEU },
       { titre: 'Besoin de climatisation', valeur: F.kW(res.climatisation), detail: 'Palier clim : ' + F.textePalierPac(res.palierClimatisation), rgb: FROID }
-    ];
+    ].filter(function (ca) { return interne || ca.rgb !== BLEU; });
     if (res.anah) {
       cartes.push({ titre: 'Catégorie Anah', valeur: res.anah.categorie.label, detail: res.anah.categorie.detail, rgb: COULEURS_ANAH[res.anah.categorie.id] });
     }
@@ -229,7 +236,26 @@
         ['Catégorie', res.anah ? res.anah.categorie.label + ' – ' + res.anah.categorie.detail : '']
       ]]
     );
-    paire(
+    if (!interne) {
+      // Version client : logement et installation prévue, sans l'enveloppe ni les cotes de chantier.
+      paire(
+        ['Votre logement', [
+          ['Zone climatique', F.libelle(D.ZONES, k.zone)],
+          ['Température extérieure de base', k.tBaseHiver + ' °C'],
+          ['Confort hiver / été', k.tConfortHiver + ' °C / ' + k.tConfortEte + ' °C'],
+          ['Surface chauffée', F.nf(sommeListe(res.pieces, function (r) { return r.surface; }), 1) + ' m²'],
+          ['Volume chauffé', F.nf(res.volume) + ' m³']
+        ]],
+        ['Installation prévue', [
+          ['Type d\'installation', F.libelle(D.SYSTEMES, res.systeme)],
+          ['Sortie d\'eau PAC', ins.regimeEau ? F.libelle(D.REGIMES_EAU, ins.regimeEau) : ''],
+          ['ECS', F.texteEcs(ins)],
+          ['Ballon tampon', F.texteOuiNon(ins.ballonTampon) + (ins.ballonTampon === 'oui' && ins.volumeTampon ? ' – ' + ins.volumeTampon + ' L' : '')],
+          ['Électricité', ins.electrique === 'mono' ? 'Monophasé' : ins.electrique === 'tri' ? 'Triphasé' : ''],
+          ['Régulation connectée', F.texteOuiNon(ins.regulation)]
+        ].filter(function (l) { return !(airAir && /^(Ballon tampon|ECS|Sortie d)/.test(l[0])); })]
+      );
+    } else paire(
       ['Climat / enveloppe', [
         ['Zone', F.libelle(D.ZONES, k.zone)],
         ['Base hiver / été', k.tBaseHiver + ' °C / ' + k.tBaseEte + ' °C'],
@@ -268,7 +294,7 @@
     // Pièces calculées : celles du relevé, ou les niveaux du mode global (logement saisi d'un bloc).
     var global = res.mode === 'global';
     var sources = res.sources;
-    if (global) {
+    if (global && interne) {
       var g = state.global;
       paire(
         ['Logement (dimensionnement global)', [
@@ -322,9 +348,11 @@
     });
     y = doc.lastAutoTable.finalY + 4;
     police(doc, 7.5, false, GRIS);
-    var noteClim = doc.splitTextToSize(t('* Climatisation : besoin simultané de la maison (pic à ' + res.climCreneau + ', heure d\'été ; ' +
-      'soleil et occupants non simultanés dans toutes les pièces), pour le groupe extérieur, au moins égal à la plus grosse pièce. La somme des pièces (' + F.kW(res.climSommePieces) + ') sert au choix des unités intérieures. ' +
-      'Puissances frigorifiques nominales air/air, humidité (latent) comprise.'), UTILE);
+    var noteClim = doc.splitTextToSize(t(interne
+      ? '* Climatisation : besoin simultané de la maison (pic à ' + res.climCreneau + ', heure d\'été ; ' +
+        'soleil et occupants non simultanés dans toutes les pièces), pour le groupe extérieur, au moins égal à la plus grosse pièce. La somme des pièces (' + F.kW(res.climSommePieces) + ') sert au choix des unités intérieures. ' +
+        'Puissances frigorifiques nominales air/air, humidité (latent) comprise.'
+      : '* Climatisation : puissance du groupe extérieur ; toutes les pièces ne sont pas au soleil en même temps, elle est donc inférieure à la somme des pièces.'), UTILE);
     doc.text(noteClim, MARGE, y + 2);
     y += noteClim.length * 3.4 + 5;
 
@@ -345,7 +373,8 @@
       return h + doc.splitTextToSize(nom, LARGEUR_LIBELLE - 3).length * 4.3 + 3;
     }
 
-    sources.forEach(function (p, i) {
+    // Version client : pas de détail des calculs pièce par pièce.
+    (interne ? sources : []).forEach(function (p, i) {
       var r = res.pieces[i];
       var vitrages = F.lignesVitrages(p, r);
       var lignes = [
@@ -397,7 +426,7 @@
 
     /* --- Mentions --- */
     var mentions = 'Dimensionnement indicatif établi par méthode simplifiée à partir des relevés effectués sur place. ' +
-      (airAir ? '' : 'Radiateurs neufs et radiateurs acier types 11, 21, 22, 33 : puissances ΔT50 du catalogue ' + D.CATALOGUE_RADIATEURS.source + ' (EN 442) ; ' +
+      (airAir || !interne ? '' : 'Radiateurs neufs et radiateurs acier types 11, 21, 22, 33 : puissances ΔT50 du catalogue ' + D.CATALOGUE_RADIATEURS.source + ' (EN 442) ; ' +
         'autres radiateurs existants : valeurs indicatives, à recouper avec la documentation du fabricant. ') +
       'Plafonds Anah ' + D.ANAH.annee + ' : à vérifier lors du dépôt du dossier. Document établi le ' + new Date().toLocaleDateString('fr-FR') + '.';
     police(doc, 7.5, false, GRIS);
@@ -417,7 +446,7 @@
       doc.text('Page ' + pg + ' / ' + n, LARG - MARGE, HAUT - 7, { align: 'right' });
     }
 
-    return { blob: doc.output('blob'), nom: nomFichier(state) };
+    return { blob: doc.output('blob'), nom: nomFichier(state) + '_' + VERSIONS[interne ? 'interne' : 'client'].suffixe + '.pdf', version: interne ? 'interne' : 'client' };
   }
 
   function disponible() {
@@ -425,10 +454,11 @@
   }
 
   // Résout { blob, nom } : le PDF du relevé, avec le logo et les coordonnées de l'entreprise.
-  function generer(state) {
+  // version : 'client' ou 'interne' (défaut, compte rendu complet).
+  function generer(state, version) {
     if (!disponible()) return Promise.reject(new Error('Bibliothèque PDF non chargée'));
     return root.Entreprise.logo().then(function (logo) {
-      return construire(state, root.Entreprise.get(), logo);
+      return construire(state, root.Entreprise.get(), logo, version);
     });
   }
 
@@ -445,6 +475,7 @@
 
   root.Rapport = {
     generer: generer,
+    VERSIONS: VERSIONS,
     telecharger: telecharger,
     disponible: disponible
   };

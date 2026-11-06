@@ -577,3 +577,9 @@ table.mini tr.total th { color: var(--text); }
   body { background: #fff; padding: 0; }
   .topbar, .totals, .toast, .dialog, .btn, .tabs { display: none !important; }
 }
+
+/* ---------- Choix du PDF ---------- */
+
+.pdf-choix { display: flex; flex-direction: column; gap: 10px; }
+.pdf-choix .btn { flex-direction: column; align-items: flex-start; gap: 2px; padding: 12px 14px; text-align: left; white-space: normal; }
+.pdf-choix .btn span { font-size: .82rem; font-weight: 400; opacity: .85; }

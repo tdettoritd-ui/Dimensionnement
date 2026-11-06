@@ -1272,9 +1272,18 @@
 
   /* ---------- Export PDF ---------- */
 
-  function exporterPdf() {
+  var dlgPdf = document.getElementById('dlg-pdf');
+  dlgPdf.addEventListener('click', function (e) {
+    if (e.target === dlgPdf || e.target.closest('[data-close]')) { dlgPdf.close(); return; }
+    var b = e.target.closest('[data-pdf]');
+    if (!b) return;
+    dlgPdf.close();
+    exporterPdf(b.dataset.pdf);
+  });
+
+  function exporterPdf(version) {
     toast('Création du PDF…');
-    window.Rapport.generer(state).then(function (f) {
+    window.Rapport.generer(state, version).then(function (f) {
       window.Rapport.telecharger(f);
       toast('PDF enregistré : ' + f.nom);
     }).catch(function (err) {
@@ -1290,7 +1299,7 @@
     switch (bt.dataset.global) {
       case 'nouveau': nouveauReleve(); break;
       case 'chantiers': afficherChantiers(); dlg.showModal(); break;
-      case 'pdf': exporterPdf(); break;
+      case 'pdf': dlgPdf.showModal(); break;
       case 'email': window.Envoi.ouvrir(state); break;
       case 'sauver': sauvegarder(); break;
     }

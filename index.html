@@ -78,6 +78,19 @@
     <div id="form-entreprise" class="dialog-body"></div>
   </dialog>
 
+  <dialog id="dlg-pdf" class="dialog">
+    <div class="dialog-head">
+      <h2>Créer un PDF</h2>
+      <button type="button" class="btn ghost icon-btn" data-close aria-label="Fermer">✕</button>
+    </div>
+    <div class="dialog-body">
+      <div class="pdf-choix">
+        <button type="button" class="btn primary" data-pdf="client"><strong>PDF client</strong><span>Résultats et préconisations, sans le détail des calculs</span></button>
+        <button type="button" class="btn" data-pdf="interne"><strong>PDF détaillé (interne)</strong><span>Compte rendu complet : enveloppe, installation, détail des calculs par pièce</span></button>
+      </div>
+    </div>
+  </dialog>
+
   <dialog id="dlg-envoi" class="dialog">
     <div class="dialog-head">
       <h2>Envoyer par email</h2>
