@@ -147,6 +147,15 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
   box-shadow: var(--shadow);
 }
 
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  min-height: 52px;
+}
+.card-head .card-title { margin: 0; }
+
 details.card > summary {
   display: flex;
   align-items: center;
@@ -190,6 +199,69 @@ details.card[open] > summary .chev { transform: rotate(180deg); }
   .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .spacer { display: block; grid-column: span 1; }
   .field-pair { grid-column: span 4; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+}
+
+/* ---------- Onglets (barre verticale à gauche) ---------- */
+
+.layout { display: flex; align-items: flex-start; max-width: 1060px; margin: 0 auto; }
+.layout > .app { flex: 1 1 auto; min-width: 0; margin: 0; padding-left: 10px; }
+
+.tabs {
+  position: sticky;
+  top: var(--top-h, 60px);
+  flex: none;
+  width: 76px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 0 12px 8px;
+  max-height: calc(100vh - var(--top-h, 60px) - var(--bar-h) - env(safe-area-inset-bottom) - 16px);
+  overflow-y: auto;
+}
+.tab {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-height: 58px;
+  padding: 8px 2px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: .68rem;
+  font-weight: 650;
+  line-height: 1.1;
+  text-align: center;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.tab:hover { background: var(--surface-2); color: var(--text); }
+.tab[aria-selected="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tab-badge {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  min-width: 17px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: .65rem;
+  line-height: 17px;
+}
+
+.tabs-suite { display: flex; justify-content: space-between; gap: 8px; }
+.tabs-suite .btn { min-width: 0; }
+
+@media (min-width: 640px) {
+  .tabs { width: 180px; padding-left: 16px; }
+  .tab { flex-direction: row; justify-content: flex-start; gap: 10px; min-height: 44px; padding: 10px 12px; font-size: .92rem; text-align: left; }
+  .tab-badge { position: static; margin-left: auto; }
+  .layout > .app { padding-left: 16px; }
 }
 
 /* ---------- Champs ---------- */
@@ -474,5 +546,5 @@ table.mini tr.total th { color: var(--text); }
 
 @media print {
   body { background: #fff; padding: 0; }
-  .topbar, .totals, .toast, .dialog, .btn { display: none !important; }
+  .topbar, .totals, .toast, .dialog, .btn, .tabs { display: none !important; }
 }

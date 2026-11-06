@@ -12,6 +12,7 @@
   var CLE_CHANTIERS = 'dimclim.chantiers';
   var CLE_BROUILLON = 'dimclim.brouillon';
   var CLE_THEME = 'dimclim.theme';
+  var CLE_ONGLET = 'dimclim.onglet';
 
   var OUI_NON = [['oui', 'Oui'], ['non', 'Non']];
 
@@ -189,7 +190,7 @@
   var state = normaliser(lire(CLE_BROUILLON, null) || nouveauChantier());
   var modifie = false;
   var ui = {
-    open: { client: true, climat: true, installation: false, prime: false },
+    onglet: lire(CLE_ONGLET, 'type'),
     replie: {},
     detail: {}
   };
@@ -282,11 +283,10 @@
   }
 
   function encart(key, titre, sousTitre, contenu) {
-    return '<details class="card" data-key="open.' + key + '"' + (ui.open[key] ? ' open' : '') + '>' +
-      '<summary><span class="card-title">' + esc(titre) + '</span>' +
-      '<span class="card-sub" id="sub-' + key + '">' + (sousTitre || '') + '</span>' +
-      '<svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary>' +
-      '<div class="card-body">' + contenu + '</div></details>';
+    return '<section class="card" aria-labelledby="titre-' + key + '">' +
+      '<div class="card-head"><h2 class="card-title" id="titre-' + key + '">' + esc(titre) + '</h2>' +
+      '<span class="card-sub" id="sub-' + key + '">' + (sousTitre || '') + '</span></div>' +
+      '<div class="card-body">' + contenu + '</div></section>';
   }
 
   /* ---------- Encarts ---------- */
@@ -612,6 +612,93 @@
       '</section>';
   }
 
+  /* ---------- Onglets (barre verticale à gauche) ---------- */
+
+  var ONGLETS = [
+    { id: 'type', label: 'Type', icone: '<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>' },
+    { id: 'client', label: 'Client', icone: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>' },
+    { id: 'climat', label: 'Climat', icone: '<path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>' },
+    { id: 'installation', label: 'Installation', icone: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94z"/>' },
+    { id: 'prime', label: 'Prime', icone: '<path d="M18 7a6 6 0 1 0 0 10M4 10h9M4 14h9"/>' },
+    { id: 'pieces', label: 'Pièces', icone: '<path d="M3 10l9-7 9 7v10a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/>' }
+  ];
+
+  function ongletActif() {
+    return ONGLETS.filter(function (o) { return o.id === ui.onglet; })[0] || ONGLETS[0];
+  }
+
+  function libelleOnglet(o) {
+    return o.id === 'pieces' && state.mode === 'global' ? 'Logement' : o.label;
+  }
+
+  function renderOnglets() {
+    var actif = ongletActif().id;
+    return ONGLETS.map(function (o) {
+      var on = o.id === actif;
+      var badge = o.id === 'pieces' && state.mode !== 'global' ? '<span class="tab-badge">' + state.pieces.length + '</span>' : '';
+      return '<button type="button" role="tab" class="tab" data-onglet="' + o.id + '" aria-selected="' + on + '"' + (on ? '' : ' tabindex="-1"') + '>' +
+        '<svg viewBox="0 0 24 24" aria-hidden="true">' + o.icone + '</svg><span>' + esc(libelleOnglet(o)) + '</span>' + badge + '</button>';
+    }).join('');
+  }
+
+  function contenuOnglet(id) {
+    switch (id) {
+      case 'client': return renderClient();
+      case 'climat': return renderClimat();
+      case 'installation': return renderInstallation();
+      case 'prime': return renderPrime();
+      case 'pieces':
+        return renderMode() + (state.mode === 'global'
+          ? renderGlobal()
+          : '<div class="pieces-head"><h2>Pièces</h2><span class="muted" id="nb-pieces"></span></div>' +
+            state.pieces.map(renderPiece).join('') +
+            '<button type="button" class="btn add-piece" data-action="ajouter-piece">+ Ajouter une pièce</button>');
+      default: return renderSysteme();
+    }
+  }
+
+  // Boutons « précédent / suivant » en bas de l'onglet.
+  function suiteOnglets() {
+    var k = ONGLETS.indexOf(ongletActif());
+    var prec = ONGLETS[k - 1];
+    var suiv = ONGLETS[k + 1];
+    return '<div class="tabs-suite">' +
+      (prec ? '<button type="button" class="btn" data-onglet="' + prec.id + '">← ' + esc(libelleOnglet(prec)) + '</button>' : '<span></span>') +
+      (suiv ? '<button type="button" class="btn primary" data-onglet="' + suiv.id + '">' + esc(libelleOnglet(suiv)) + ' →</button>' : '') +
+      '</div>';
+  }
+
+  function changerOnglet(id, focus) {
+    ui.onglet = id;
+    ecrire(CLE_ONGLET, id);
+    window.scrollTo(0, 0);
+    render();
+    if (focus) {
+      var b = document.querySelector('#onglets [data-onglet="' + id + '"]');
+      if (b) b.focus();
+    }
+  }
+
+  var nav = document.getElementById('onglets');
+  nav.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-onglet]');
+    if (b) changerOnglet(b.dataset.onglet, false);
+  });
+  // Flèches haut / bas entre les onglets (rôle « tablist » vertical).
+  nav.addEventListener('keydown', function (e) {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    e.preventDefault();
+    var k = ONGLETS.indexOf(ongletActif()) + (e.key === 'ArrowDown' ? 1 : -1);
+    changerOnglet(ONGLETS[(k + ONGLETS.length) % ONGLETS.length].id, true);
+  });
+
+  // Hauteur de l'en-tête : la barre d'onglets reste collée juste dessous.
+  function hauteurEntete() {
+    var t = document.querySelector('.topbar');
+    if (t) document.documentElement.style.setProperty('--top-h', t.offsetHeight + 'px');
+  }
+  window.addEventListener('resize', hauteurEntete);
+
   function render() {
     var actif = document.activeElement;
     var focusBind = actif && actif.dataset ? actif.dataset.bind || actif.dataset.set : null;
@@ -620,13 +707,9 @@
     try { sel = actif && actif.selectionStart != null ? [actif.selectionStart, actif.selectionEnd] : null; } catch (e) { sel = null; }
     var y = window.scrollY;
 
+    nav.innerHTML = renderOnglets();
     document.getElementById('app').innerHTML =
-      renderSysteme() + renderClient() + renderClimat() + renderInstallation() + renderPrime() + renderMode() +
-      (state.mode === 'global'
-        ? renderGlobal()
-        : '<div class="pieces-head"><h2>Pièces</h2><span class="muted" id="nb-pieces"></span></div>' +
-          state.pieces.map(renderPiece).join('') +
-          '<button type="button" class="btn add-piece" data-action="ajouter-piece">+ Ajouter une pièce</button>') +
+      contenuOnglet(ongletActif().id) + suiteOnglets() +
       '<datalist id="noms-pieces">' +
       ['Séjour', 'Salon', 'Salle à manger', 'Cuisine', 'Chambre', 'Chambre parentale', 'Bureau', 'Salle de bain', 'Salle d\'eau', 'Entrée', 'Couloir', 'Véranda', 'Buanderie']
         .map(function (n) { return '<option value="' + esc(n) + '">'; }).join('') +
@@ -937,12 +1020,13 @@
     var el = e.target;
     if (!el.dataset || !el.dataset.key) return;
     if (el.dataset.key === 'detail') ui.detail[el.dataset.uid] = el.open;
-    else ui.open[el.dataset.key.split('.')[1]] = el.open;
   }, true);
 
   app.addEventListener('click', function (e) {
     var bt = e.target.closest('button');
     if (!bt) return;
+
+    if (bt.dataset.onglet) { changerOnglet(bt.dataset.onglet, false); return; }
 
     if (bt.dataset.set) {
       var path = bt.dataset.set;
@@ -1112,10 +1196,8 @@
     modifie = false;
     ui.replie = {};
     ui.detail = {};
-    ui.open.client = true;
     ecrire(CLE_BROUILLON, state);
-    render();
-    window.scrollTo(0, 0);
+    changerOnglet('type', false);
   }
 
   /* ---------- Export PDF ---------- */
@@ -1196,5 +1278,6 @@
     }).catch(function () { /* hors ligne non disponible */ });
   }
 
+  hauteurEntete();
   render();
 })();
