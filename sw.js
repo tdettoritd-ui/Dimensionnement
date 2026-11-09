@@ -1,6 +1,6 @@
 // Service worker : met l'application en cache pour un usage hors ligne sur le terrain.
 // Incrémenter VERSION à chaque modification des fichiers listés.
-var VERSION = 'releve-pac-v33';
+var VERSION = 'releve-pac-v34';
 var FICHIERS = [
   './',
   './index.html',
@@ -9,6 +9,7 @@ var FICHIERS = [
   './js/calc.js',
   './js/format.js',
   './js/entreprise.js',
+  './js/plans.js',
   './js/rapport.js',
   './js/envoi.js',
   './js/app.js',

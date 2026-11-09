@@ -87,7 +87,7 @@
     return v === '' || v == null ? '—' : v;
   }
 
-  function construire(state, ent, logo, version) {
+  function construire(state, ent, logo, version, images) {
     var interne = version !== 'client';
     var doc = new root.jspdf.jsPDF({ unit: 'mm', format: 'a4' });
     var LARG = doc.internal.pageSize.getWidth();
@@ -457,10 +457,38 @@
     sautSiBesoin(lignesMentions.length * 3.4 + 2);
     doc.text(lignesMentions, MARGE, y + 2);
 
+    y += lignesMentions.length * 3.4 + 2;
+
+    /* --- Plans : PDF cités (joints à l'envoi), images en fin de document, page à l'orientation du plan --- */
+    var plansPdf = (state.plans || []).filter(function (pl) { return !root.Plans.estImage(pl); });
+    if (plansPdf.length) {
+      police(doc, 7.5, false, GRIS);
+      var joints = doc.splitTextToSize(t('Plans fournis séparément (PDF) : ' + plansPdf.map(function (pl) { return pl.nom; }).join(', ') + '.'), UTILE);
+      sautSiBesoin(joints.length * 3.4 + 2);
+      doc.text(joints, MARGE, y + 2);
+    }
+    (images || []).forEach(function (im, k) {
+      var paysage = im.w > im.h;
+      doc.addPage('a4', paysage ? 'landscape' : 'portrait');
+      var L = doc.internal.pageSize.getWidth();
+      var H = doc.internal.pageSize.getHeight();
+      police(doc, 11, true, BLEU);
+      doc.text(t('Plan ' + (k + 1) + (im.nom ? ' – ' + im.nom : '')), MARGE, MARGE + 4);
+      var largeur = L - 2 * MARGE;
+      var hauteur = H - MARGE - 10 - BAS - 2;
+      var echelle = Math.min(largeur / im.w, hauteur / im.h);
+      var w = im.w * echelle;
+      var h = im.h * echelle;
+      doc.addImage(im.dataUrl, /^data:image\/png/.test(im.dataUrl) ? 'PNG' : 'JPEG', MARGE + (largeur - w) / 2, MARGE + 10, w, h);
+    });
+
     /* --- Pied de page --- */
     var n = doc.getNumberOfPages();
     for (var pg = 1; pg <= n; pg++) {
       doc.setPage(pg);
+      // Pages de plans en paysage : dimensions de la page en cours.
+      LARG = doc.internal.pageSize.getWidth();
+      HAUT = doc.internal.pageSize.getHeight();
       couleurTrait(doc, FILET);
       doc.setLineWidth(0.3);
       doc.line(MARGE, HAUT - 11, LARG - MARGE, HAUT - 11);
@@ -480,8 +508,12 @@
   // version : 'client' ou 'interne' (défaut, compte rendu complet).
   function generer(state, version) {
     if (!disponible()) return Promise.reject(new Error('Bibliothèque PDF non chargée'));
-    return root.Entreprise.logo().then(function (logo) {
-      return construire(state, root.Entreprise.get(), logo, version);
+    var plans = (state.plans || []).filter(function (pl) { return root.Plans && root.Plans.estImage(pl); });
+    return Promise.all([
+      root.Entreprise.logo(),
+      Promise.all(plans.map(function (pl) { return root.Plans.imagePourPdf(pl); }))
+    ]).then(function (r) {
+      return construire(state, root.Entreprise.get(), r[0], version, r[1].filter(Boolean));
     });
   }
 

@@ -148,7 +148,8 @@
         unites: [] // unités extérieures (prises en compte à partir de deux)
       },
       prime: { personnes: '', rfr: '', zone: 'hors_idf' },
-      pieces: [nouvellePiece(1)]
+      pieces: [nouvellePiece(1)],
+      plans: [] // { id, nom, type, taille } : fichiers stockés à part (js/plans.js)
     };
   }
 
@@ -172,6 +173,7 @@
     out.global = Object.assign(nouveauGlobal(), g);
     out.global.vitrageRapide = Object.assign(nouveauGlobal().vitrageRapide, g.vitrageRapide);
     out.global.vitrages = (g.vitrages || []).map(function (v) { return Object.assign(nouveauVitrage(), v); });
+    out.plans = (c.plans || []).filter(function (pl) { return pl && pl.id; });
     out.pieces = (c.pieces || []).map(function (p, i) {
       var np = Object.assign(nouvellePiece(i + 1), p);
       // Relevés antérieurs : un seul radiateur (« radiateur »), repris s'il était renseigné.
@@ -748,12 +750,89 @@
       '</div></section>';
   }
 
+  /* ---------- Plans du dossier client ---------- */
+
+  var urlsPlans = {}; // id → URL locale du fichier (vignettes, consultation)
+
+  function renderPlans() {
+    var plans = state.plans;
+    return encart('plans', 'Plans', plans.length ? plans.length + ' fichier' + (plans.length > 1 ? 's' : '') : '',
+      (plans.length
+        ? '<div class="plans">' + plans.map(function (pl, k) {
+          var image = window.Plans.estImage(pl);
+          return '<div class="plan">' +
+            '<button type="button" class="plan-apercu" data-action="voir-plan" data-j="' + k + '" aria-label="Voir ' + esc(pl.nom) + '">' +
+            (image ? '<img alt="" data-plan-img="' + esc(pl.id) + '">' : '<span class="plan-pdf">PDF</span>') + '</button>' +
+            '<div class="plan-infos">' +
+            champ('Nom du plan', 'plans.' + k + '.nom', { autocomplete: 'off' }) +
+            '<div class="plan-actions"><span class="muted small">' + (pl.taille < 1024 * 1024 ? nf(Math.max(pl.taille / 1024, 1)) + ' Ko' : nf(pl.taille / 1024 / 1024, 1) + ' Mo') + '</span>' +
+            '<button type="button" class="btn ghost small danger" data-action="supprimer-plan" data-j="' + k + '">Supprimer</button></div>' +
+            '</div></div>';
+        }).join('') + '</div>'
+        : '<p class="muted">Aucun plan.</p>') +
+      '<div class="plans-ajout">' +
+      '<label class="btn primary"><input type="file" accept="image/*" capture="environment" data-plan-ajout hidden>Prendre une photo</label>' +
+      '<label class="btn"><input type="file" accept="image/*,application/pdf" multiple data-plan-ajout hidden>Ajouter des fichiers</label>' +
+      '</div>' +
+      '<p class="hint">Plans, croquis ou photos (images ou PDF), enregistrés sur cet appareil avec le chantier. ' +
+      'Les images sont ajoutées en fin de PDF (client et détaillé) ; les plans PDF sont joints à l\'envoi par email.</p>');
+  }
+
+  // Vignettes : URL locale de chaque fichier, créée une fois puis réutilisée à chaque affichage.
+  function vignettesPlans() {
+    state.plans.forEach(function (pl) {
+      var poser = function () {
+        document.querySelectorAll('[data-plan-img="' + pl.id + '"]').forEach(function (img) { if (img.src !== urlsPlans[pl.id]) img.src = urlsPlans[pl.id]; });
+      };
+      if (urlsPlans[pl.id]) { poser(); return; }
+      window.Plans.lire(pl.id).then(function (blob) {
+        if (!blob) return;
+        urlsPlans[pl.id] = URL.createObjectURL(blob);
+        poser();
+      }).catch(function () { /* fichier absent : pas de vignette */ });
+    });
+  }
+
+  function ajouterPlans(fichiers) {
+    if (!fichiers.length) return;
+    toast('Enregistrement…');
+    fichiers.reduce(function (suite, f) {
+      return suite.then(function () {
+        return window.Plans.ajouter(f).then(function (pl) { state.plans.push(pl); });
+      });
+    }, Promise.resolve()).then(function () {
+      toast(fichiers.length > 1 ? fichiers.length + ' plans ajoutés' : 'Plan ajouté');
+    }).catch(function (err) {
+      toast('Plan non enregistré : ' + err.message);
+    }).then(function () {
+      modification();
+      render();
+    });
+  }
+
+  // Supprime de l'appareil les fichiers qui ne sont plus utilisés par le relevé en cours ni par un chantier sauvegardé.
+  function nettoyerPlans(ids) {
+    var utilises = {};
+    state.plans.forEach(function (pl) { utilises[pl.id] = true; });
+    chantiers().forEach(function (c) { ((c.data && c.data.plans) || []).forEach(function (pl) { utilises[pl.id] = true; }); });
+    ids.forEach(function (id) {
+      if (utilises[id]) return;
+      window.Plans.supprimer(id).catch(function () { /* déjà absent */ });
+      if (urlsPlans[id]) { URL.revokeObjectURL(urlsPlans[id]); delete urlsPlans[id]; }
+    });
+  }
+
+  function idsPlans(chantier) {
+    return ((chantier && chantier.plans) || []).map(function (pl) { return pl.id; });
+  }
+
   /* ---------- Onglets (barre verticale à gauche) ---------- */
 
   var ONGLETS = [
     { id: 'client', label: 'Type et client', icone: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
       sections: [{ id: 'type', label: 'Type', rendu: function () { return renderSysteme(); } },
-        { id: 'client', label: 'Client', rendu: function () { return renderClient(); } }] },
+        { id: 'client', label: 'Client', rendu: function () { return renderClient(); } },
+        { id: 'plans', label: 'Plans', rendu: function () { return renderPlans(); } }] },
     { id: 'enveloppe', label: 'Climat et installation', icone: '<path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>',
       sections: [{ id: 'climat', label: 'Climat', rendu: function () { return renderClimat(); } },
         { id: 'installation', label: 'Installation', rendu: function () { return renderInstallation(); } }] },
@@ -950,6 +1029,7 @@
         if (sel && el.setSelectionRange) try { el.setSelectionRange(sel[0], sel[1]); } catch (e) { /* type sans sélection */ }
       }
     }
+    vignettesPlans();
     rafraichir();
   }
 
@@ -1238,6 +1318,11 @@
 
   app.addEventListener('change', function (e) {
     var el = e.target;
+    if (el.hasAttribute('data-plan-ajout')) {
+      ajouterPlans(Array.prototype.slice.call(el.files || []));
+      el.value = '';
+      return;
+    }
     if (!el.dataset.bind || el.tagName !== 'SELECT') return;
     setPath(state, el.dataset.bind, el.value);
     // Autre type de paroi : l'épaisseur saisie ne vaut plus, retour à l'épaisseur courante.
@@ -1337,6 +1422,23 @@
       case 'supprimer-radiateur':
         p.radiateurs.splice(j, 1);
         break;
+      case 'voir-plan':
+        var pl = state.plans[j];
+        if (!pl) return;
+        if (urlsPlans[pl.id]) { window.open(urlsPlans[pl.id], '_blank'); return; }
+        var fenetre = window.open('', '_blank');
+        window.Plans.lire(pl.id).then(function (blob) {
+          if (!blob) throw new Error('fichier introuvable sur cet appareil');
+          urlsPlans[pl.id] = URL.createObjectURL(blob);
+          if (fenetre) fenetre.location = urlsPlans[pl.id]; else window.open(urlsPlans[pl.id], '_blank');
+        }).catch(function (err) { if (fenetre) fenetre.close(); toast('Plan illisible : ' + err.message); });
+        return;
+      case 'supprimer-plan':
+        var retire = state.plans[j];
+        if (!retire || !confirm('Supprimer le plan « ' + retire.nom + ' » ?')) return;
+        state.plans.splice(j, 1);
+        nettoyerPlans([retire.id]);
+        break;
       case 'ajouter-unite':
         var unites = state.installation.unites;
         // La première unité ajoutée représente l'existant : on en crée deux d'emblée.
@@ -1424,7 +1526,9 @@
       var c = chantiers().find(function (x) { return x.id === load.dataset.load; });
       if (!c) return;
       if (modifie && !confirm('Les modifications non sauvegardées du relevé en cours seront perdues. Continuer ?')) return;
+      var avant = idsPlans(state);
       state = normaliser(c.data);
+      nettoyerPlans(avant);
       state.id = c.id;
       modifie = false;
       ui.replie = {};
@@ -1441,6 +1545,7 @@
       if (!cible) return;
       if (!confirm('Supprimer définitivement le chantier « ' + ((cible.data.client || {}).nom || 'Sans nom') + ' » ?')) return;
       ecrire(CLE_CHANTIERS, l.filter(function (x) { return x.id !== cible.id; }));
+      nettoyerPlans(idsPlans(cible.data));
       if (state.id === cible.id) { state.id = null; ecrire(CLE_BROUILLON, state); rafraichir(); }
       afficherChantiers();
     }
@@ -1455,9 +1560,11 @@
   }
 
   function nouveauReleve() {
-    if (!confirm('Démarrer un nouveau relevé ?\nClient, installation, prime et pièces seront réinitialisés (les réglages climat / enveloppe sont conservés).' +
+    if (!confirm('Démarrer un nouveau relevé ?\nClient, installation, prime, plans et pièces seront réinitialisés (les réglages climat / enveloppe sont conservés).' +
       (modifie ? '\n\nAttention : des modifications ne sont pas sauvegardées.' : ''))) return;
+    var avant = idsPlans(state);
     state = nouveauChantier(JSON.parse(JSON.stringify(state.climat)), state.mode, state.systeme);
+    nettoyerPlans(avant);
     modifie = false;
     ui.replie = {};
     ui.sous = null;

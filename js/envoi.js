@@ -12,6 +12,7 @@
   var fichier = null;
   var etat = null;
   var version = 'client';
+  var plansJoints = []; // plans PDF du dossier, joints au partage
 
   function partageFichiersPossible() {
     try {
@@ -105,6 +106,11 @@
     boutonsPdf(false);
     statut('Préparation du PDF…');
     var v = version;
+    var plans = (state.plans || []).filter(function (pl) { return !root.Plans.estImage(pl); });
+    Promise.all(plans.map(function (pl) {
+      return root.Plans.lire(pl.id).then(function (b) { return b ? new File([b], pl.nom.replace(/[\\/:*?"<>|]/g, '_') + '.pdf', { type: 'application/pdf' }) : null; })
+        .catch(function () { return null; });
+    })).then(function (l) { plansJoints = l.filter(Boolean); });
     root.Rapport.generer(state, v).then(function (f) {
       if (etat !== state || v !== version) return;
       fichier = f;
@@ -122,7 +128,9 @@
       navigator.clipboard.writeText(a).catch(function () { /* copie facultative */ });
     }
     var pdf = new File([fichier.blob], fichier.nom, { type: 'application/pdf' });
-    navigator.share({ files: [pdf], title: el('env-objet').value, text: el('env-message').value })
+    var fichiers = [pdf].concat(plansJoints);
+    if (navigator.canShare && !navigator.canShare({ files: fichiers })) fichiers = [pdf];
+    navigator.share({ files: fichiers, title: el('env-objet').value, text: el('env-message').value })
       .then(function () { statut('Relevé partagé.'); })
       .catch(function (err) {
         if (err && err.name === 'AbortError') return;
