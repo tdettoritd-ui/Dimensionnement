@@ -219,6 +219,8 @@
     equipementsParM2: 7,   // W/m² : pièce non reconnue
     occupantsInconnu: 1,   // pièce non reconnue
     foyerDefaut: 4,        // personnes si ni l'encart Prime ni les chambres ne le donnent
+    foyerMax: 20,          // au-delà, « Personnes au foyer » est une erreur de saisie (souvent le RFR) : ignorée
+    densiteMax: 400,       // W/m² : au-delà, puissance de pièce signalée « à vérifier » dans le récapitulatif
     heuresCreneaux: ['10 h', '12 h', '15 h', '17 h', '19 h'],
     partEcartCreneaux: [0, 0.15, 0.85, 1, 0.8], // part de l'écart été (T ext - T int) au créneau : baies, murs, toit, air
     majorationDefaut: 0    // % ajouté à la puissance nominale (pièces et total) si « Majoration clim » est vide

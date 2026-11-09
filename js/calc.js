@@ -424,6 +424,13 @@
     return { occupants: occupants, equipements: equipements };
   }
 
+  // Personnes du foyer saisies dans l'encart Prime, si plausibles (1 à foyerMax) ; sinon null.
+  // Un revenu fiscal tapé dans ce champ donnait des dizaines de milliers d'occupants.
+  function personnesFoyer(prime) {
+    var n = prime ? Math.floor(num(prime.personnes)) : 0;
+    return n >= 1 && n <= D.CLIM.foyerMax ? n : null;
+  }
+
   // Personnes du foyer : occupants saisis en mode global ; encart Prime ; sinon nombre de
   // chambres + 1 (mode pièce par pièce) ; sinon valeur par défaut.
   function foyerChantier(chantier) {
@@ -431,8 +438,8 @@
       var occ = chantier.global ? num(chantier.global.occupants) : 0;
       if (occ > 0) return { n: occ, source: 'global' };
     }
-    var n = chantier.prime ? Math.floor(num(chantier.prime.personnes)) : 0;
-    if (n >= 1) return { n: n, source: 'prime' };
+    var n = personnesFoyer(chantier.prime);
+    if (n) return { n: n, source: 'prime' };
     if (chantier.mode === 'global') return { n: D.CLIM.foyerDefaut, source: 'defaut' };
     var chambres = 0;
     (chantier.pieces || []).forEach(function (p) {
@@ -828,7 +835,7 @@
   }
 
   function categorieAnah(prime) {
-    if (!prime || estVide(prime.personnes) || estVide(prime.rfr)) return null;
+    if (!prime || estVide(prime.personnes) || estVide(prime.rfr) || !personnesFoyer(prime)) return null;
     var seuils = seuilsAnah(num(prime.personnes), prime.zone);
     if (!seuils) return null;
     var rfr = num(prime.rfr);
@@ -845,6 +852,7 @@
     rIsolant: rIsolant,
     uParoi: uParoi,
     uEnveloppe: uEnveloppe,
+    personnesFoyer: personnesFoyer,
     segmentsMurs: segmentsMurs,
     mursIsolationPiece: mursIsolationPiece,
     epaisseurMur: epaisseurMur,

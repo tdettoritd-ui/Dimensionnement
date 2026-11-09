@@ -407,7 +407,7 @@
   function renderPrime() {
     return encart('prime', 'Prime', '<span id="sub-prime-badge"></span>',
       '<div class="grid">' +
-      champ('Personnes au foyer', 'prime.personnes', { kind: 'int' }) +
+      champ('Personnes au foyer', 'prime.personnes', { kind: 'int', aide: '', aideId: 'personnes-aide' }) +
       champ('Revenu fiscal de référence', 'prime.rfr', { kind: 'num', unite: '€' }) +
       bascule('Zone', 'prime.zone', [['hors_idf', 'Hors Île-de-France'], ['idf', 'Île-de-France']], { cls: 'span-2', obligatoire: true }) +
       '</div>' +
@@ -633,6 +633,11 @@
     return manque;
   }
 
+  // « Personnes au foyer » renseigné mais hors de 1 à foyerMax : ignoré par le calcul.
+  function personnesInvalides() {
+    return !C.estVide(state.prime.personnes) && !C.personnesFoyer(state.prime);
+  }
+
   function renderRecap() {
     var res = C.calculChantier(state);
     var global = res.mode === 'global';
@@ -643,6 +648,8 @@
       var p = res.sources[k];
       var ex = r.radiateurExistant;
       var manque = global ? [] : aCompleter(p, r);
+      // Puissance par m² anormale : souvent une saisie en cm ou une valeur dans le mauvais champ.
+      if (r.surface > 0 && Math.max(r.chauffage, r.climatisation) / r.surface > D.CLIM.densiteMax) manque.push('puissance à vérifier');
       if (manque.length) alertes++;
       var nom = global ? esc(p.nom)
         : '<button type="button" class="lien" data-aller-piece="' + esc(p.uid) + '">' + esc(p.nom || 'Pièce ' + (k + 1)) + '</button>' +
@@ -661,10 +668,12 @@
     }).join('');
     var colonnes = radiateurs ? 7 : 5;
     var anah = res.anah;
+    var personnesKo = personnesInvalides();
     return '<section class="card" aria-labelledby="titre-recap"><div class="card-head"><h2 class="card-title" id="titre-recap">Récapitulatif</h2>' +
       '<span class="card-sub">' + esc(F.libelle(D.SYSTEMES, res.systeme)) + (state.client.nom ? ' · ' + esc(state.client.nom) : '') + '</span></div>' +
       '<div class="card-body">' +
-      (alertes ? '<p class="hint warn">⚠ ' + alertes + ' pièce' + (alertes > 1 ? 's' : '') + ' à compléter (voir le tableau).</p>' : '') +
+      (alertes ? '<p class="hint warn">⚠ ' + alertes + ' pièce' + (alertes > 1 ? 's' : '') + ' à compléter ou à vérifier (voir le tableau).</p>' : '') +
+      (personnesKo ? '<p class="hint warn">⚠ Personnes au foyer : « ' + esc(state.prime.personnes) + ' » ignoré (onglet Prime).</p>' : '') +
       '<div class="kpis">' +
       '<div class="kpi heat"><span>Chauffage</span><strong>' + kW(res.chauffage) + '</strong><small>Palier ' + esc(F.textePalierPac(res.palierChauffage)) +
         (surface > 0 ? ' · ' + nf(res.chauffage / surface) + ' W/m²' : '') + '</small></div>' +
@@ -1131,6 +1140,13 @@
 
     var anah = res.anah;
     setHTML('sub-prime-badge', badgeAnah(anah));
+    var aidePers = document.getElementById('personnes-aide');
+    if (aidePers) {
+      aidePers.classList.toggle('warn', personnesInvalides());
+      setHTML('personnes-aide', personnesInvalides()
+        ? '⚠ Valeur improbable (1 à ' + D.CLIM.foyerMax + ' personnes) : ignorée. Le revenu fiscal a-t-il été saisi ici ?'
+        : '');
+    }
     setHTML('anah-resultat', anah
       ? '<div class="anah-cat anah-' + anah.categorie.id + '"><span>Catégorie</span><strong>' + anah.categorie.label + '</strong><small>' + anah.categorie.detail + '</small></div>' +
         '<table class="mini"><tbody>' +

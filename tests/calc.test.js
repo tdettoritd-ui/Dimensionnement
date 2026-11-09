@@ -650,3 +650,17 @@ test('catalogue Altech : radiateurs neufs et existants acier', () => {
   const ch = C.calculChantier({ climat, prime: {}, installation: { regimeEau: '45/35', hauteurRadiateur: '500' }, pieces: [piece] });
   assert.equal(ch.pieces[0].radiateurNeuf.modele.hauteur, 500);
 });
+
+test('personnes au foyer improbables (RFR saisi à la place) : ignorées', () => {
+  const p = { nom: 'Pièce de vie', longueur: '6', largeur: '5', hauteur: '2,5', mursExposes: '2', vitrages: [], occupants: '', equipements: '' };
+  const ok = C.calculChantier({ climat, prime: { personnes: '4' }, pieces: [p] });
+  const ko = C.calculChantier({ climat, prime: { personnes: '43250', rfr: '43250' }, pieces: [p] });
+  assert.equal(C.personnesFoyer({ personnes: '43250' }), null);
+  assert.equal(C.personnesFoyer({ personnes: '4' }), 4);
+  assert.equal(C.personnesFoyer({ personnes: '0' }), null);
+  // Pièce de vie : occupants = foyer ; valeur ignorée → défaut (4), clim raisonnable.
+  assert.equal(ko.foyer.source, 'defaut');
+  proche(ko.pieces[0].climatisation, ok.pieces[0].climatisation);
+  assert.ok(ko.pieces[0].climatisation < 10000);
+  assert.equal(ko.anah, null);
+});
