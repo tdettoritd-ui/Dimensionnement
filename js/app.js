@@ -623,6 +623,74 @@
       '</section>';
   }
 
+  /* ---------- Récapitulatif (fin de saisie) ---------- */
+
+  // Points à compléter d'une pièce, repérés avant d'éditer le PDF.
+  function aCompleter(p, r) {
+    var manque = [];
+    if (!(r.surface > 0)) manque.push('surface');
+    if (C.estVide(p.lineaire) && C.estVide(p.mursExposes)) manque.push('murs exposés');
+    return manque;
+  }
+
+  function renderRecap() {
+    var res = C.calculChantier(state);
+    var global = res.mode === 'global';
+    var radiateurs = !airAir();
+    var surface = somme(res.pieces, function (r) { return r.surface; });
+    var alertes = 0;
+    var lignes = res.pieces.map(function (r, k) {
+      var p = res.sources[k];
+      var ex = r.radiateurExistant;
+      var manque = global ? [] : aCompleter(p, r);
+      if (manque.length) alertes++;
+      var nom = global ? esc(p.nom)
+        : '<button type="button" class="lien" data-aller-piece="' + esc(p.uid) + '">' + esc(p.nom || 'Pièce ' + (k + 1)) + '</button>' +
+          (manque.length ? '<span class="recap-alerte">⚠ ' + esc(manque.join(', ')) + '</span>' : '');
+      return '<tr><th scope="row">' + nom + '</th>' +
+        '<td>' + nf(r.surface, 1) + ' m²</td>' +
+        '<td class="c-heat">' + W(r.chauffage) + '</td>' +
+        '<td class="c-cool">' + W(r.climatisation) + '</td>' +
+        '<td>' + (global ? '—' : esc(textePalierSplit(r.palierSplit))) + '</td>' +
+        (radiateurs
+          ? '<td>' + (global ? '—' : esc(F.textePalierRadiateur(r.radiateurNeuf, true)) +
+              (r.radiateurNeuf.modele ? '<small>réf. ' + esc(r.radiateurNeuf.modele.ref) + '</small>' : '')) + '</td>' +
+            '<td>' + (ex ? W(ex.puissance) + ' <span class="badge ' + (ex.suffisant ? 'ok">Suffisant' : 'ko">Insuffisant') + '</span>' : '—') + '</td>'
+          : '') +
+        '</tr>';
+    }).join('');
+    var colonnes = radiateurs ? 7 : 5;
+    var anah = res.anah;
+    return '<section class="card" aria-labelledby="titre-recap"><div class="card-head"><h2 class="card-title" id="titre-recap">Récapitulatif</h2>' +
+      '<span class="card-sub">' + esc(F.libelle(D.SYSTEMES, res.systeme)) + (state.client.nom ? ' · ' + esc(state.client.nom) : '') + '</span></div>' +
+      '<div class="card-body">' +
+      (alertes ? '<p class="hint warn">⚠ ' + alertes + ' pièce' + (alertes > 1 ? 's' : '') + ' à compléter (voir le tableau).</p>' : '') +
+      '<div class="kpis">' +
+      '<div class="kpi heat"><span>Chauffage</span><strong>' + kW(res.chauffage) + '</strong><small>Palier ' + esc(F.textePalierPac(res.palierChauffage)) +
+        (surface > 0 ? ' · ' + nf(res.chauffage / surface) + ' W/m²' : '') + '</small></div>' +
+      '<div class="kpi cool"><span>Climatisation (groupe ext.)</span><strong>' + kW(res.climatisation) + '</strong><small>Palier ' + esc(F.textePalierPac(res.palierClimatisation)) +
+        ' · pic ' + esc(res.climCreneau) + '</small></div>' +
+      '</div>' +
+      '<table class="mini recap-infos"><tbody>' +
+      '<tr><th>Surface / volume chauffés</th><td>' + nf(surface, 1) + ' m² · ' + nf(res.volume) + ' m³</td></tr>' +
+      '<tr><th>Coefficient G</th><td>' + nf(res.coefficientG, 2) + ' W/m³.K</td></tr>' +
+      (radiateurs ? '<tr><th>Sortie d\'eau PAC</th><td>' + esc(F.libelle(D.REGIMES_EAU, state.installation.regimeEau)) + '</td></tr>' : '') +
+      '<tr><th>Catégorie Anah</th><td>' + (anah ? badgeAnah(anah) : '—') + '</td></tr>' +
+      '</tbody></table>' +
+      '<h3 class="sub-title">' + (global ? 'Par niveau' : 'Par pièce') + '</h3>' +
+      '<div class="recap-scroll"><table class="recap"><thead><tr>' +
+      '<th scope="col">' + (global ? 'Niveau' : 'Pièce') + '</th><th scope="col">Surface</th><th scope="col">Chauffage</th><th scope="col">Clim</th><th scope="col">Split</th>' +
+      (radiateurs ? '<th scope="col">Radiateur neuf</th><th scope="col">Radiateurs existants</th>' : '') +
+      '</tr></thead><tbody>' + (lignes || '<tr><td colspan="' + colonnes + '">Aucune pièce.</td></tr>') + '</tbody>' +
+      '<tfoot><tr><th scope="row">Total</th><td>' + nf(surface, 1) + ' m²</td><td class="c-heat">' + kW(res.chauffage) + '</td><td class="c-cool">' + kW(res.climSommePieces) + '</td><td colspan="' + (colonnes - 4) + '"></td></tr>' +
+      '<tr><th scope="row">Clim simultanée</th><td></td><td></td><td class="c-cool">' + kW(res.climatisation) + '</td><td colspan="' + (colonnes - 4) + '"></td></tr></tfoot>' +
+      '</table></div>' +
+      '<p class="hint">Clim simultanée : puissance du groupe extérieur (toutes les pièces ne sont pas au soleil en même temps). Toucher une pièce pour la modifier.</p>' +
+      '<div class="recap-actions"><button type="button" class="btn primary" data-global-recap="pdf">Créer le PDF</button>' +
+      '<button type="button" class="btn" data-global-recap="sauver">Sauver le chantier</button></div>' +
+      '</div></section>';
+  }
+
   /* ---------- Onglets (barre verticale à gauche) ---------- */
 
   var ONGLETS = [
@@ -633,7 +701,8 @@
       sections: [{ id: 'climat', label: 'Climat', rendu: function () { return renderClimat(); } },
         { id: 'installation', label: 'Installation', rendu: function () { return renderInstallation(); } }] },
     { id: 'prime', label: 'Prime', icone: '<path d="M18 7a6 6 0 1 0 0 10M4 10h9M4 14h9"/>' },
-    { id: 'pieces', label: 'Pièces', icone: '<path d="M3 10l9-7 9 7v10a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/>' }
+    { id: 'pieces', label: 'Pièces', icone: '<path d="M3 10l9-7 9 7v10a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/>' },
+    { id: 'recap', label: 'Récapitulatif', court: 'Récap', icone: '<path d="M4 4h16v16H4zM4 9h16M4 14h16M10 9v11"/>' }
   ];
   // Onglets des versions précédentes (une section par onglet).
   var ONGLETS_ANCIENS = { type: 'client', climat: 'enveloppe', installation: 'enveloppe' };
@@ -671,8 +740,12 @@
     return ONGLETS.map(function (o) {
       var on = o.id === actif;
       var badge = o.id === 'pieces' && parPiece() ? '<span class="tab-badge">' + state.pieces.length + '</span>' : '';
-      var html = '<button type="button" role="tab" class="tab" data-onglet="' + o.id + '" aria-selected="' + on + '"' + (on ? '' : ' tabindex="-1"') + '>' +
-        '<svg viewBox="0 0 24 24" aria-hidden="true">' + o.icone + '</svg><span>' + esc(libelleOnglet(o)) + '</span>' + badge + '</button>';
+      var html = '<button type="button" role="tab" class="tab" data-onglet="' + o.id + '" aria-selected="' + on + '"' + (on ? '' : ' tabindex="-1"') +
+        (o.court ? ' aria-label="' + esc(libelleOnglet(o)) + '"' : '') + '>' +
+        '<svg viewBox="0 0 24 24" aria-hidden="true">' + o.icone + '</svg>' +
+        (o.court
+          ? '<span class="tab-long">' + esc(libelleOnglet(o)) + '</span><span class="tab-court" aria-hidden="true">' + esc(o.court) + '</span>'
+          : '<span>' + esc(libelleOnglet(o)) + '</span>') + badge + '</button>';
       // Sous-onglets de l'onglet ouvert : sections ou pièces, pour y aller directement.
       var liste = on ? sousOnglets(o) : [];
       if (liste.length || (on && o.id === 'pieces' && parPiece())) {
@@ -694,6 +767,7 @@
       return o.sections.map(function (sc) { return '<div class="ancre" id="sec-' + sc.id + '">' + sc.rendu() + '</div>'; }).join('');
     }
     if (o.id === 'prime') return renderPrime();
+    if (o.id === 'recap') return renderRecap();
     if (!parPiece()) return renderMode() + renderGlobal();
     // Toutes les pièces à la suite ; les sous-onglets y mènent directement.
     return renderMode() +
@@ -1124,6 +1198,10 @@
     if (!bt) return;
 
     if (bt.dataset.onglet) { changerOnglet(bt.dataset.onglet, false); return; }
+    // Récapitulatif : une pièce ouvre l'onglet Pièces sur elle ; raccourcis PDF / sauvegarde.
+    if (bt.dataset.allerPiece) { changerOnglet('pieces', false); allerPiece(bt.dataset.allerPiece, false); return; }
+    if (bt.dataset.globalRecap === 'pdf') { document.getElementById('dlg-pdf').showModal(); return; }
+    if (bt.dataset.globalRecap === 'sauver') { sauvegarder(); render(); return; }
 
     if (bt.dataset.set) {
       var path = bt.dataset.set;

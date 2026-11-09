@@ -282,6 +282,10 @@ details.card[open] > summary .chev { transform: rotate(180deg); }
 .subtab:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .subtab.add { color: var(--accent); border: 1px dashed var(--border); text-align: center; }
 
+/* Libellé court sur téléphone (barre étroite), long au-delà. */
+.tab-long { display: none; }
+.tab-court { display: inline; }
+
 .tabs-suite { display: flex; justify-content: space-between; gap: 8px; }
 .tabs-suite .btn { min-width: 0; }
 
@@ -289,6 +293,8 @@ details.card[open] > summary .chev { transform: rotate(180deg); }
   .tabs { width: 180px; padding-left: 16px; }
   .tab { flex-direction: row; justify-content: flex-start; gap: 10px; min-height: 44px; padding: 10px 12px; font-size: .92rem; text-align: left; }
   .tab-badge { position: static; margin-left: auto; }
+  .tab-long { display: inline; }
+  .tab-court { display: none; }
   .subtabs { margin-left: 18px; padding-left: 8px; }
   .subtab { font-size: .85rem; padding: 7px 10px; -webkit-line-clamp: 1; white-space: nowrap; text-overflow: ellipsis; display: block; }
   .layout > .app { padding-left: 16px; }
@@ -412,7 +418,7 @@ select {
 .kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .kpi { border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; }
 .kpi span { font-size: .8rem; font-weight: 600; }
-.kpi strong { font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+.kpi strong { font-size: clamp(1.15rem, 5vw, 1.5rem); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .kpi small { color: var(--muted); font-variant-numeric: tabular-nums; }
 .kpi.heat { background: var(--heat-soft); color: var(--heat); }
 .kpi.cool { background: var(--cool-soft); color: var(--cool); }
@@ -587,3 +593,22 @@ table.mini tr.total th { color: var(--text); }
 
 /* Pièces à la suite : un sous-onglet amène la pièce juste sous l'en-tête. */
 section.piece, .ancre { scroll-margin-top: calc(var(--top-h, 60px) + 8px); }
+
+/* ---------- Récapitulatif ---------- */
+
+.recap-infos { margin-top: 12px; }
+.recap-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--border); border-radius: 10px; }
+table.recap { width: 100%; border-collapse: collapse; font-size: .85rem; font-variant-numeric: tabular-nums; }
+table.recap th, table.recap td { padding: 7px 8px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; vertical-align: top; }
+table.recap thead th { background: var(--surface-2); color: var(--muted); font-weight: 600; font-size: .78rem; }
+table.recap th[scope="row"], table.recap thead th:first-child { text-align: left; position: sticky; left: 0; background: var(--surface); }
+table.recap thead th:first-child { background: var(--surface-2); }
+table.recap tfoot th, table.recap tfoot td { font-weight: 700; background: var(--surface-2); border-bottom: 0; }
+table.recap tfoot th[scope="row"] { background: var(--surface-2); }
+table.recap td small { display: block; color: var(--muted); font-size: .72rem; }
+table.recap .c-heat { color: var(--heat); }
+table.recap .c-cool { color: var(--cool); }
+table.recap .badge { font-size: .7rem; }
+.lien { background: none; border: 0; padding: 0; font: inherit; font-weight: 600; color: var(--accent); cursor: pointer; text-align: left; text-decoration: underline; text-underline-offset: 2px; }
+.recap-alerte { display: block; color: var(--warn); font-size: .72rem; font-weight: 600; }
+.recap-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
