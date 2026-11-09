@@ -255,11 +255,11 @@ details.card[open] > summary .chev { transform: rotate(180deg); }
 }
 
 /* Sous-onglets : une entrée par pièce. */
-.subtabs { display: flex; flex-direction: column; gap: 2px; margin: 2px 0 4px 6px; padding-left: 4px; border-left: 2px solid var(--border); }
+.subtabs { display: flex; flex-direction: column; gap: 2px; margin: 2px 0 4px 2px; padding-left: 3px; border-left: 2px solid var(--border); }
 .subtab {
   display: block;
   min-height: 36px;
-  padding: 6px 4px;
+  padding: 6px 3px;
   border: 1px solid transparent;
   border-radius: 8px;
   background: none;
@@ -274,7 +274,8 @@ details.card[open] > summary .chev { transform: rotate(180deg); }
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  hyphens: auto;
 }
 .subtab:hover { background: var(--surface-2); color: var(--text); }
 .subtab[aria-current="true"] { background: var(--surface); border-color: var(--accent); color: var(--accent); }
