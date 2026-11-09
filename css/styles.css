@@ -612,3 +612,7 @@ table.recap .badge { font-size: .7rem; }
 .lien { background: none; border: 0; padding: 0; font: inherit; font-weight: 600; color: var(--accent); cursor: pointer; text-align: left; text-decoration: underline; text-underline-offset: 2px; }
 .recap-alerte { display: block; color: var(--warn); font-size: .72rem; font-weight: 600; }
 .recap-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.recap-unite { display: block; color: var(--muted); font-size: .72rem; font-weight: 500; }
+table.recap td.recap-noms { text-align: left; white-space: normal; min-width: 140px; }
+.unite-ligne { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 8px; }
+.unite-ligne .field { flex: 1 1 auto; }

@@ -95,7 +95,8 @@
       activite: 'sedentaire',
       equipements: '',
       debit: '',
-      radiateurs: []
+      radiateurs: [],
+      unite: '' // uid de l'unité extérieure (vide : la première)
     };
   }
 
@@ -143,7 +144,8 @@
         electrique: '', regulation: '', miniTableau: '',
         distUiUe: '', distUeTableau: '', distUiTableau: '', condensats: '',
         regimeEau: '55/45',
-        hauteurRadiateur: ''
+        hauteurRadiateur: '',
+        unites: [] // unités extérieures (prises en compte à partir de deux)
       },
       prime: { personnes: '', rfr: '', zone: 'hors_idf' },
       pieces: [nouvellePiece(1)]
@@ -401,7 +403,28 @@
       champ('Distance UI ↔ tableau', 'installation.distUiTableau', { kind: 'num', unite: 'm' }) +
       bascule('Évacuation condensats à proximité', 'installation.condensats') +
       '</div>' +
-      '<p class="hint">Les autres informations servent au chiffrage, sans effet sur le calcul.</p>');
+      '<p class="hint">Les autres informations servent au chiffrage, sans effet sur le calcul.</p>' +
+      renderUnites());
+  }
+
+  // Unités extérieures : à partir de deux, chaque pièce est raccordée à l'une d'elles.
+  function renderUnites() {
+    var u = state.installation.unites;
+    return '<h3 class="sub-title">Unités extérieures</h3>' +
+      u.map(function (x, k) {
+        return '<div class="unite-ligne">' +
+          champ('Unité ' + (k + 1), 'installation.unites.' + k + '.nom', { autocomplete: 'off', placeholder: 'ex. UE garage' }) +
+          '<button type="button" class="btn ghost small danger" data-action="supprimer-unite" data-j="' + k + '" aria-label="Supprimer l\'unité ' + (k + 1) + '">Supprimer</button>' +
+          '</div>';
+      }).join('') +
+      '<button type="button" class="btn small" data-action="ajouter-unite">+ Ajouter une unité extérieure</button>' +
+      '<p class="hint">' + (u.length >= 2
+        ? 'Choisir l\'unité de chaque pièce dans l\'onglet Pièces : bilan et palier par unité dans le récapitulatif et le PDF.'
+        : 'Une seule unité extérieure : rien à saisir. Plusieurs : les ajouter ici (au moins deux), puis raccorder chaque pièce à la sienne.') + '</p>';
+  }
+
+  function nomUnite(u, k) {
+    return u.nom || 'Unité ' + (k + 1);
   }
 
   function renderPrime() {
@@ -586,6 +609,9 @@
           aide: '', aideId: 'lineaire-aide-' + p.uid
         }) +
         renderIsolationMurs(p, i) +
+        (state.installation.unites.length >= 2
+          ? liste('Unité extérieure', 'pieces.' + i + '.unite', state.installation.unites.map(function (u, k) { return { value: u.uid, label: nomUnite(u, k) }; }), { cls: 'span-2' })
+          : '') +
         bascule('Pièce sous toiture ?', 'pieces.' + i + '.sousToiture', [['oui', 'Oui'], ['non', 'Non (étage interm.)']], { obligatoire: true, cls: 'span-2' }) +
         bascule('Pièce sur plancher bas ?', 'pieces.' + i + '.surPlancherBas', [['oui', 'Oui'], ['non', 'Non (à l\'étage)']], { obligatoire: true, cls: 'span-2' }) +
         '</div>' +
@@ -638,6 +664,25 @@
     return !C.estVide(state.prime.personnes) && !C.personnesFoyer(state.prime);
   }
 
+  // Bilan par unité extérieure (à partir de deux unités).
+  function renderRecapUnites(res) {
+    if (!res.unites.length) return '';
+    var vides = res.unites.filter(function (u) { return !u.indices.length; }).length;
+    return '<h3 class="sub-title">Par unité extérieure</h3>' +
+      (vides ? '<p class="hint warn">⚠ ' + vides + ' unité' + (vides > 1 ? 's' : '') + ' sans pièce raccordée.</p>' : '') +
+      '<div class="recap-scroll"><table class="recap"><thead><tr>' +
+      '<th scope="col">Unité</th><th scope="col">Pièces</th><th scope="col">Chauffage</th><th scope="col">Clim simultanée</th><th scope="col">Somme des splits</th>' +
+      '</tr></thead><tbody>' +
+      res.unites.map(function (u) {
+        return '<tr><th scope="row">' + esc(u.nom) + '</th>' +
+          '<td class="recap-noms">' + (u.indices.map(function (i) { return esc(res.sources[i].nom); }).join(', ') || '—') + '</td>' +
+          '<td class="c-heat">' + kW(u.chauffage) + '<small>Palier ' + esc(F.textePalierPac(u.palierChauffage)) + '</small></td>' +
+          '<td class="c-cool">' + kW(u.climatisation) + '<small>Palier ' + esc(F.textePalierPac(u.palierClimatisation)) + '</small></td>' +
+          '<td>' + kW(u.climSommePieces) + '<small>' + u.indices.length + ' unité' + (u.indices.length > 1 ? 's' : '') + ' int.</small></td></tr>';
+      }).join('') +
+      '</tbody></table></div>';
+  }
+
   function renderRecap() {
     var res = C.calculChantier(state);
     var global = res.mode === 'global';
@@ -651,8 +696,10 @@
       // Puissance par m² anormale : souvent une saisie en cm ou une valeur dans le mauvais champ.
       if (r.surface > 0 && Math.max(r.chauffage, r.climatisation) / r.surface > D.CLIM.densiteMax) manque.push('puissance à vérifier');
       if (manque.length) alertes++;
+      var unite = res.unites.filter(function (u) { return u.indices.indexOf(k) >= 0; })[0];
       var nom = global ? esc(p.nom)
         : '<button type="button" class="lien" data-aller-piece="' + esc(p.uid) + '">' + esc(p.nom || 'Pièce ' + (k + 1)) + '</button>' +
+          (unite ? '<small class="recap-unite">' + esc(unite.nom) + '</small>' : '') +
           (manque.length ? '<span class="recap-alerte">⚠ ' + esc(manque.join(', ')) + '</span>' : '');
       return '<tr><th scope="row">' + nom + '</th>' +
         '<td>' + nf(r.surface, 1) + ' m²</td>' +
@@ -686,6 +733,7 @@
       (radiateurs ? '<tr><th>Sortie d\'eau PAC</th><td>' + esc(F.libelle(D.REGIMES_EAU, state.installation.regimeEau)) + '</td></tr>' : '') +
       '<tr><th>Catégorie Anah</th><td>' + (anah ? badgeAnah(anah) : '—') + '</td></tr>' +
       '</tbody></table>' +
+      renderRecapUnites(res) +
       '<h3 class="sub-title">' + (global ? 'Par niveau' : 'Par pièce') + '</h3>' +
       '<div class="recap-scroll"><table class="recap"><thead><tr>' +
       '<th scope="col">' + (global ? 'Niveau' : 'Pièce') + '</th><th scope="col">Surface</th><th scope="col">Chauffage</th><th scope="col">Clim</th><th scope="col">Split</th>' +
@@ -1288,6 +1336,17 @@
         break;
       case 'supprimer-radiateur':
         p.radiateurs.splice(j, 1);
+        break;
+      case 'ajouter-unite':
+        var unites = state.installation.unites;
+        // La première unité ajoutée représente l'existant : on en crée deux d'emblée.
+        if (!unites.length) unites.push({ uid: uid(), nom: '' });
+        unites.push({ uid: uid(), nom: '' });
+        break;
+      case 'supprimer-unite':
+        var retiree = state.installation.unites.splice(j, 1)[0];
+        state.pieces.forEach(function (pc) { if (pc.unite === retiree.uid) pc.unite = ''; });
+        if (state.installation.unites.length < 2) state.installation.unites = [];
         break;
       case 'supprimer-vitrage':
         getPath(state, bt.dataset.base).vitrages.splice(j, 1);

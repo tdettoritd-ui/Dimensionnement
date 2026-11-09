@@ -738,21 +738,23 @@
     return chantier && chantier.systeme === 'air_air' ? 'air_air' : 'air_eau';
   }
 
-  function calculChantier(chantier) {
-    var airAir = systemeChantier(chantier) === 'air_air';
-    // Air/air : pas de circuit d'eau, les radiateurs relevés sont ignorés.
-    var regimeEau = !airAir && chantier.installation ? chantier.installation.regimeEau : undefined;
-    var foyer = foyerChantier(chantier);
-    var global = chantier.mode === 'global';
-    // Pièces calculées : celles du relevé, ou les niveaux virtuels du mode global.
-    var sources = global ? piecesGlobales(chantier.global, foyer.n) : (chantier.pieces || []);
-    if (airAir) sources = sources.map(function (p) { return Object.assign({}, p, { radiateur: null, radiateurs: [] }); });
-    var hauteurRadiateur = chantier.installation ? chantier.installation.hauteurRadiateur : '';
-    var pieces = sources.map(function (p) { return calculPiece(p, chantier.climat, regimeEau, foyer.n, hauteurRadiateur); });
+  // Unités extérieures déclarées dans l'installation, prises en compte à partir de deux.
+  function unitesChantier(chantier) {
+    var u = chantier.installation && Array.isArray(chantier.installation.unites) ? chantier.installation.unites : [];
+    return u.length >= 2 ? u : [];
+  }
+
+  // Unité d'une pièce : celle choisie si elle existe, sinon la première.
+  function uniteDePiece(piece, unites) {
+    for (var k = 0; k < unites.length; k++) if (unites[k].uid === piece.unite) return piece.unite;
+    return unites.length ? unites[0].uid : null;
+  }
+
+  // Climatisation simultanée d'un ensemble de pièces (groupe extérieur) : maximum sur les créneaux
+  // horaires (soleil des pièces + écart extérieur de l'heure), sans dépasser la somme des pointes,
+  // au moins la plus grosse pièce (pièce par pièce : les niveaux du mode global ne sont pas des unités).
+  function bilanClim(pieces, foyerN, climat, global) {
     var K = D.CLIM;
-    var chauffage = 0;
-    var deperditionsTotales = 0;
-    var volume = 0;
     var sommePieces = 0;
     var sommeSensible = 0;
     var piecesMax = 0;
@@ -766,9 +768,6 @@
     var solaires = rayonnementCreneaux(null);
     pieces.forEach(function (r) {
       var c = r.clim;
-      chauffage += r.chauffage;
-      deperditionsTotales += r.G;
-      volume += r.volume;
       sommePieces += c.nominale;
       sommeSensible += c.sensible;
       piecesMax = Math.max(piecesMax, c.nominale);
@@ -782,10 +781,8 @@
       c.solairesCreneaux.forEach(function (q, j) { solaires[j] += q; });
     });
     // Occupants simultanés plafonnés au foyer (ou à la pièce la plus occupée).
-    var plafond = Math.max(foyer.n, occupantsMax);
+    var plafond = Math.max(foyerN, occupantsMax);
     var part = occupants > plafond ? plafond / occupants : 1;
-    // Total simultané : maximum sur les créneaux horaires (soleil de la maison + écart extérieur de l'heure),
-    // sans dépasser la somme des pointes des pièces.
     var sensible = 0;
     var creneau = 0;
     var parCreneau = solaires.map(function (q, j) {
@@ -795,9 +792,48 @@
     });
     sensible = Math.min(sensible, sommeSensible);
     var latent = latentAir + part * occupantsLatent;
-    // Le groupe extérieur doit au moins alimenter la plus grosse unité intérieure à sa pointe
-    // (pièce par pièce seulement : les niveaux du mode global ne sont pas des unités intérieures).
-    var climatisation = Math.max(puissanceNominale(sensible, latent) * majorationClim(chantier.climat || {}), global ? 0 : piecesMax);
+    var climatisation = pieces.length
+      ? Math.max(puissanceNominale(sensible, latent) * majorationClim(climat), global ? 0 : piecesMax)
+      : 0;
+    return {
+      climatisation: climatisation, sensible: sensible, latent: latent, sommePieces: sommePieces,
+      creneau: K.heuresCreneaux[creneau], parCreneau: parCreneau
+    };
+  }
+
+  function calculChantier(chantier) {
+    var airAir = systemeChantier(chantier) === 'air_air';
+    // Air/air : pas de circuit d'eau, les radiateurs relevés sont ignorés.
+    var regimeEau = !airAir && chantier.installation ? chantier.installation.regimeEau : undefined;
+    var foyer = foyerChantier(chantier);
+    var global = chantier.mode === 'global';
+    // Pièces calculées : celles du relevé, ou les niveaux virtuels du mode global.
+    var sources = global ? piecesGlobales(chantier.global, foyer.n) : (chantier.pieces || []);
+    if (airAir) sources = sources.map(function (p) { return Object.assign({}, p, { radiateur: null, radiateurs: [] }); });
+    var hauteurRadiateur = chantier.installation ? chantier.installation.hauteurRadiateur : '';
+    var pieces = sources.map(function (p) { return calculPiece(p, chantier.climat, regimeEau, foyer.n, hauteurRadiateur); });
+    var chauffage = 0;
+    var deperditionsTotales = 0;
+    var volume = 0;
+    pieces.forEach(function (r) {
+      chauffage += r.chauffage;
+      deperditionsTotales += r.G;
+      volume += r.volume;
+    });
+    var bilan = bilanClim(pieces, foyer.n, chantier.climat || {}, global);
+    // Plusieurs unités extérieures : chaque pièce est raccordée à l'une d'elles (la première par défaut).
+    var unites = global ? [] : unitesChantier(chantier).map(function (u, k, liste) {
+      var indices = [];
+      sources.forEach(function (p, i) { if (uniteDePiece(p, liste) === u.uid) indices.push(i); });
+      var sel = indices.map(function (i) { return pieces[i]; });
+      var ch = sel.reduce(function (t, r) { return t + r.chauffage; }, 0);
+      var b = bilanClim(sel, foyer.n, chantier.climat || {}, false);
+      return {
+        uid: u.uid, nom: u.nom || 'Unité ' + (k + 1), indices: indices,
+        chauffage: ch, climatisation: b.climatisation, climSommePieces: b.sommePieces, climCreneau: b.creneau,
+        palierChauffage: palier(ch / 1000, D.PALIERS_PAC), palierClimatisation: palier(b.climatisation / 1000, D.PALIERS_PAC)
+      };
+    });
     return {
       mode: global ? 'global' : 'pieces',
       systeme: airAir ? 'air_air' : 'air_eau',
@@ -810,17 +846,19 @@
       volume: volume,
       coefficientG: volume > 0 ? deperditionsTotales / volume : 0,
       // Puissance frigorifique nominale simultanée (groupe extérieur, PAC air/air, gainable).
-      climatisation: climatisation,
-      climSensible: sensible,
-      climLatent: latent,
-      climCreneau: K.heuresCreneaux[creneau],
-      climParCreneau: parCreneau,
+      climatisation: bilan.climatisation,
+      climSensible: bilan.sensible,
+      climLatent: bilan.latent,
+      climCreneau: bilan.creneau,
+      climParCreneau: bilan.parCreneau,
       climMajoration: majorationClim(chantier.climat || {}),
       // Somme des puissances des pièces (unités intérieures) : non simultanée, indicative.
-      climSommePieces: sommePieces,
+      climSommePieces: bilan.sommePieces,
+      // Unités extérieures (au moins deux déclarées) : bilan de chacune ; vide sinon.
+      unites: unites,
       foyer: foyer,
       palierChauffage: palier(chauffage / 1000, D.PALIERS_PAC),
-      palierClimatisation: palier(climatisation / 1000, D.PALIERS_PAC),
+      palierClimatisation: palier(bilan.climatisation / 1000, D.PALIERS_PAC),
       anah: categorieAnah(chantier.prime)
     };
   }
@@ -887,6 +925,7 @@
     vitragesPiece: vitragesPiece,
     calculPiece: calculPiece,
     calculChantier: calculChantier,
+    uniteDePiece: uniteDePiece,
     systemeChantier: systemeChantier,
     seuilsAnah: seuilsAnah,
     categorieAnah: categorieAnah

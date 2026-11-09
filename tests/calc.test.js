@@ -664,3 +664,22 @@ test('personnes au foyer improbables (RFR saisi à la place) : ignorées', () =>
   assert.ok(ko.pieces[0].climatisation < 10000);
   assert.equal(ko.anah, null);
 });
+
+test('plusieurs unités extérieures : bilan par unité', () => {
+  const P = (nom, or, unite) => ({ nom, longueur: '4', largeur: '4', hauteur: '2,5', lineaire: '8', sousToiture: 'non', occupants: '', equipements: '', debit: '',
+    vitrages: [{ orientation: or, type: 'double', surface: '3', volet: 'non' }], unite });
+  const pieces = [P('Séjour', 'S', 'a'), P('Chambre 1', 'E', 'b'), P('Chambre 2', 'O', 'b'), P('Bureau', 'N', 'inconnue')];
+  const unites = [{ uid: 'a', nom: 'UE garage' }, { uid: 'b', nom: 'UE étage' }];
+  const r = C.calculChantier({ climat, prime: { personnes: '4' }, installation: { unites }, pieces });
+  assert.equal(r.unites.length, 2);
+  // Unité inconnue ou vide : première unité.
+  assert.deepEqual(r.unites.map(u => u.indices), [[0, 3], [1, 2]]);
+  // Chauffage : somme des pièces de l'unité ; clim : bilan simultané des seules pièces de l'unité.
+  proche(r.unites[0].chauffage + r.unites[1].chauffage, r.chauffage);
+  const seul = C.calculChantier({ climat, prime: { personnes: '4' }, pieces: [pieces[1], pieces[2]] });
+  proche(r.unites[1].climatisation, seul.climatisation);
+  r.unites.forEach(u => assert.ok(u.climatisation <= u.climSommePieces + 1e-9));
+  // Le total maison est inchangé ; une seule unité déclarée : pas de bilan par unité.
+  proche(r.climatisation, C.calculChantier({ climat, prime: { personnes: '4' }, pieces }).climatisation);
+  assert.equal(C.calculChantier({ climat, prime: {}, installation: { unites: [unites[0]] }, pieces }).unites.length, 0);
+});

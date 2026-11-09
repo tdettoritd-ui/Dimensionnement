@@ -201,7 +201,8 @@
       { titre: 'Besoin de chauffage', valeur: F.kW(res.chauffage), detail: 'Palier PAC : ' + F.textePalierPac(res.palierChauffage), rgb: CHAUD },
       { titre: 'Coefficient G estimé', valeur: F.nf(res.coefficientG, 2) + ' W/m³.K',
         detail: 'GV ' + F.nf(res.deperditionsTotales) + ' W/K · ' + F.nf(res.volume) + ' m³', rgb: BLEU },
-      { titre: 'Besoin de climatisation', valeur: F.kW(res.climatisation), detail: 'Palier clim : ' + F.textePalierPac(res.palierClimatisation), rgb: FROID }
+      { titre: 'Besoin de climatisation', valeur: F.kW(res.climatisation),
+        detail: res.unites.length ? res.unites.length + ' unités extérieures (voir tableau)' : 'Palier clim : ' + F.textePalierPac(res.palierClimatisation), rgb: FROID }
     ].filter(function (ca) { return interne || ca.rgb !== BLEU; });
     if (res.anah) {
       cartes.push({ titre: 'Catégorie Anah', valeur: res.anah.categorie.label, detail: res.anah.categorie.detail, rgb: COULEURS_ANAH[res.anah.categorie.id] });
@@ -324,8 +325,9 @@
       var r = res.pieces[i];
       surfaceTotale += r.surface;
       var ex = r.radiateurExistant;
+      var unite = res.unites.filter(function (u) { return u.indices.indexOf(i) >= 0; })[0];
       return [
-        t(p.nom), t(F.nf(r.surface, 1) + ' m²'), t(F.W(r.chauffage)), t(F.W(r.climatisation)),
+        t(p.nom + (unite ? '\n' + unite.nom : '')), t(F.nf(r.surface, 1) + ' m²'), t(F.W(r.chauffage)), t(F.W(r.climatisation)),
         t(global ? '—' : F.textePalierSplit(r.palierSplit)), t(global ? '—' : F.textePalierRadiateur(r.radiateurNeuf, true)),
         t(ex ? F.W(ex.puissance) + (ex.suffisant ? ' – suffisant' : ' – insuffisant') : '—')
       ].slice(0, colonnes);
@@ -339,7 +341,7 @@
       showFoot: 'lastPage',
       foot: [
         [t('Total (somme)'), t(F.nf(surfaceTotale, 1) + ' m²'), t(F.kW(res.chauffage)), t(F.kW(res.climSommePieces)), '', '', ''].slice(0, colonnes),
-        [t('Climatisation simultanée (groupe extérieur)'), '', '', t(F.kW(res.climatisation) + ' *'), '', '', ''].slice(0, colonnes)
+        [t(res.unites.length ? 'Climatisation simultanée (maison entière)' : 'Climatisation simultanée (groupe extérieur)'), '', '', t(F.kW(res.climatisation) + ' *'), '', '', ''].slice(0, colonnes)
       ],
       styles: { font: 'helvetica', fontSize: 8.5, textColor: TEXTE, lineColor: FILET, lineWidth: 0.2, cellPadding: 1.5 },
       headStyles: { fillColor: BLEU, textColor: 255, fontStyle: 'bold' },
@@ -355,6 +357,27 @@
       : '* Climatisation : puissance du groupe extérieur ; toutes les pièces ne sont pas au soleil en même temps, elle est donc inférieure à la somme des pièces.'), UTILE);
     doc.text(noteClim, MARGE, y + 2);
     y += noteClim.length * 3.4 + 5;
+
+    /* --- Unités extérieures (à partir de deux) --- */
+    if (res.unites.length) {
+      sautSiBesoin(30);
+      police(doc, 10.5, true, BLEU);
+      doc.text(t('Unités extérieures'), MARGE, y + 4);
+      doc.autoTable({
+        startY: y + 6,
+        margin: { left: MARGE, right: MARGE, top: MARGE, bottom: BAS },
+        theme: 'grid',
+        head: [['Unité', 'Pièces raccordées', 'Chauffage', 'Palier PAC', 'Clim simultanée', 'Palier clim'].map(t)],
+        body: res.unites.map(function (u) {
+          return [t(u.nom), t(u.indices.map(function (i) { return sources[i].nom; }).join(', ') || '—'),
+            t(F.kW(u.chauffage)), t(F.textePalierPac(u.palierChauffage)), t(F.kW(u.climatisation)), t(F.textePalierPac(u.palierClimatisation))];
+        }),
+        styles: { font: 'helvetica', fontSize: 8.5, textColor: TEXTE, lineColor: FILET, lineWidth: 0.2, cellPadding: 1.5 },
+        headStyles: { fillColor: BLEU, textColor: 255, fontStyle: 'bold' },
+        columnStyles: { 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right' } }
+      });
+      y = doc.lastAutoTable.finalY + 6;
+    }
 
     /* --- Détail des pièces --- */
     var LARGEUR_LIBELLE = 48;
