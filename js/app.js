@@ -608,7 +608,7 @@
           '<h4 class="sub-title">Radiateurs existants <span class="muted">(optionnel)</span></h4>' +
           renderRadiateurs(p, i));
     }
-    return '<section class="card piece" aria-label="' + esc(p.nom) + '">' +
+    return '<section class="card piece" id="piece-' + esc(p.uid) + '" aria-label="' + esc(p.nom) + '">' +
       '<div class="piece-head">' +
       '<button type="button" class="btn ghost icon-btn" data-action="replier" data-i="' + i + '" aria-expanded="' + !replie + '" aria-label="' + (replie ? 'Déplier' : 'Replier') + ' la pièce">' +
       '<svg class="chev' + (replie ? ' closed' : '') + '" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>' +
@@ -682,10 +682,10 @@
       case 'prime': return renderPrime();
       case 'pieces':
         if (!parPiece()) return renderMode() + renderGlobal();
-        var k = indexPiece();
+        // Toutes les pièces à la suite ; les sous-onglets y mènent directement.
         return renderMode() +
-          '<div class="pieces-head"><h2>' + (k >= 0 ? 'Pièce ' + (k + 1) + ' / ' + state.pieces.length : 'Pièces') + '</h2><span class="muted" id="nb-pieces"></span></div>' +
-          (k >= 0 ? renderPiece(state.pieces[k], k) : '<p class="muted">Aucune pièce : en ajouter une.</p>') +
+          '<div class="pieces-head"><h2>Pièces</h2><span class="muted" id="nb-pieces"></span></div>' +
+          (state.pieces.length ? state.pieces.map(renderPiece).join('') : '<p class="muted">Aucune pièce : en ajouter une.</p>') +
           '<button type="button" class="btn add-piece" data-action="ajouter-piece">+ Ajouter une pièce</button>';
       default: return renderSysteme();
     }
@@ -698,22 +698,48 @@
     var suiv = ONGLETS[k + 1];
     var bPrec = prec ? '<button type="button" class="btn" data-onglet="' + prec.id + '">← ' + esc(libelleOnglet(prec)) + '</button>' : '<span></span>';
     var bSuiv = suiv ? '<button type="button" class="btn primary" data-onglet="' + suiv.id + '">' + esc(libelleOnglet(suiv)) + ' →</button>' : '';
-    // Onglet Pièces : on passe d'une pièce à l'autre avant de quitter l'onglet.
-    if (ongletActif().id === 'pieces' && parPiece()) {
-      var i = indexPiece();
-      var p = state.pieces[i - 1];
-      var n = state.pieces[i + 1];
-      if (p) bPrec = '<button type="button" class="btn" data-piece="' + esc(p.uid) + '">← ' + esc(p.nom) + '</button>';
-      bSuiv = n ? '<button type="button" class="btn primary" data-piece="' + esc(n.uid) + '">' + esc(n.nom) + ' →</button>' : '';
-    }
     return '<div class="tabs-suite">' + bPrec + bSuiv + '</div>';
   }
 
-  function changerPiece(id) {
+  // Sous-onglet de la pièce affichée.
+  function marquerPiece(id) {
     ui.piece = id;
-    window.scrollTo(0, 0);
-    render();
+    document.querySelectorAll('#onglets .subtab[data-piece]').forEach(function (b) {
+      b.setAttribute('aria-current', String(b.dataset.piece === id));
+    });
   }
+
+  // Fait défiler jusqu'à la pièce (sous l'en-tête collé en haut).
+  function allerPiece(id, doux) {
+    var el = document.getElementById('piece-' + id);
+    if (!el) return;
+    marquerPiece(id);
+    suiviPause = Date.now() + (doux ? 800 : 100);
+    el.scrollIntoView({ behavior: doux ? 'smooth' : 'auto', block: 'start' });
+  }
+
+  function changerPiece(id) {
+    allerPiece(id, true);
+  }
+
+  // Au défilement, le sous-onglet suit la pièce visible en haut de l'écran.
+  var suiviPause = 0;
+  function suivrePieces() {
+    if (ongletActif().id !== 'pieces' || !parPiece() || Date.now() < suiviPause) return;
+    var haut = (document.querySelector('.topbar') || { offsetHeight: 0 }).offsetHeight + 60;
+    var courante = null;
+    state.pieces.forEach(function (p) {
+      var el = document.getElementById('piece-' + p.uid);
+      if (el && el.getBoundingClientRect().top <= haut) courante = p.uid;
+    });
+    if (!courante && state.pieces.length) courante = state.pieces[0].uid;
+    if (courante && courante !== ui.piece) marquerPiece(courante);
+  }
+  window.addEventListener('scroll', function () {
+    if (suivrePieces.attente) return;
+    suivrePieces.attente = true;
+    requestAnimationFrame(function () { suivrePieces.attente = false; suivrePieces(); });
+  }, { passive: true });
 
   function changerOnglet(id, focus) {
     ui.onglet = id;
@@ -1123,7 +1149,10 @@
         copie.mursIsolation.forEach(function (m) { m.uid = uid(); });
         state.pieces.splice(i + 1, 0, copie);
         ui.piece = copie.uid;
-        break;
+        modification();
+        render();
+        allerPiece(copie.uid, false);
+        return;
       case 'supprimer-piece':
         if (!confirm('Supprimer la pièce « ' + p.nom + ' » ?')) return;
         state.pieces.splice(i, 1);
@@ -1254,8 +1283,8 @@
     state.pieces.push(np);
     ui.piece = np.uid;
     modification();
-    window.scrollTo(0, 0);
     render();
+    allerPiece(np.uid, false);
   }
 
   function nouveauReleve() {
