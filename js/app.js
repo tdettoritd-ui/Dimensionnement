@@ -192,7 +192,7 @@
   var modifie = false;
   var ui = {
     onglet: lire(CLE_ONGLET, 'type'),
-    piece: null, // uid de la pièce affichée dans l'onglet Pièces
+    sous: null, // id de l'élément (section ou pièce) du sous-onglet courant
     replie: {},
     detail: {}
   };
@@ -626,16 +626,21 @@
   /* ---------- Onglets (barre verticale à gauche) ---------- */
 
   var ONGLETS = [
-    { id: 'type', label: 'Type', icone: '<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>' },
-    { id: 'client', label: 'Client', icone: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>' },
-    { id: 'climat', label: 'Climat', icone: '<path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>' },
-    { id: 'installation', label: 'Installation', icone: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94z"/>' },
+    { id: 'client', label: 'Type et client', icone: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+      sections: [{ id: 'type', label: 'Type', rendu: function () { return renderSysteme(); } },
+        { id: 'client', label: 'Client', rendu: function () { return renderClient(); } }] },
+    { id: 'enveloppe', label: 'Climat et installation', icone: '<path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>',
+      sections: [{ id: 'climat', label: 'Climat', rendu: function () { return renderClimat(); } },
+        { id: 'installation', label: 'Installation', rendu: function () { return renderInstallation(); } }] },
     { id: 'prime', label: 'Prime', icone: '<path d="M18 7a6 6 0 1 0 0 10M4 10h9M4 14h9"/>' },
     { id: 'pieces', label: 'Pièces', icone: '<path d="M3 10l9-7 9 7v10a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/>' }
   ];
+  // Onglets des versions précédentes (une section par onglet).
+  var ONGLETS_ANCIENS = { type: 'client', climat: 'enveloppe', installation: 'enveloppe' };
 
   function ongletActif() {
-    return ONGLETS.filter(function (o) { return o.id === ui.onglet; })[0] || ONGLETS[0];
+    var id = ONGLETS_ANCIENS[ui.onglet] || ui.onglet;
+    return ONGLETS.filter(function (o) { return o.id === id; })[0] || ONGLETS[0];
   }
 
   function libelleOnglet(o) {
@@ -646,10 +651,19 @@
     return state.mode !== 'global';
   }
 
-  // Index de la pièce affichée : celle choisie, sinon la première.
-  function indexPiece() {
-    for (var k = 0; k < state.pieces.length; k++) if (state.pieces[k].uid === ui.piece) return k;
-    return state.pieces.length ? 0 : -1;
+  // Sous-onglets d'un onglet : ses sections, ou les pièces. cible : id de l'élément à atteindre.
+  function sousOnglets(o) {
+    if (o.sections) return o.sections.map(function (sc) { return { cible: 'sec-' + sc.id, label: sc.label }; });
+    if (o.id === 'pieces' && parPiece()) {
+      return state.pieces.map(function (p, k) { return { cible: 'piece-' + p.uid, label: p.nom || 'Pièce ' + (k + 1), nomId: 'tab-nom-' + p.uid }; });
+    }
+    return [];
+  }
+
+  // Sous-onglet courant : celui choisi, sinon le premier.
+  function sousCourant(liste) {
+    for (var k = 0; k < liste.length; k++) if (liste[k].cible === ui.sous) return ui.sous;
+    return liste.length ? liste[0].cible : null;
   }
 
   function renderOnglets() {
@@ -659,36 +673,33 @@
       var badge = o.id === 'pieces' && parPiece() ? '<span class="tab-badge">' + state.pieces.length + '</span>' : '';
       var html = '<button type="button" role="tab" class="tab" data-onglet="' + o.id + '" aria-selected="' + on + '"' + (on ? '' : ' tabindex="-1"') + '>' +
         '<svg viewBox="0 0 24 24" aria-hidden="true">' + o.icone + '</svg><span>' + esc(libelleOnglet(o)) + '</span>' + badge + '</button>';
-      // Sous-onglets : une entrée par pièce, sous l'onglet Pièces ouvert.
-      if (o.id === 'pieces' && on && parPiece()) {
-        var courante = indexPiece();
-        html += '<div class="subtabs" role="group" aria-label="Pièces">' +
-          state.pieces.map(function (p, k) {
-            return '<button type="button" class="subtab" data-piece="' + esc(p.uid) + '" aria-current="' + (k === courante) + '">' +
-              '<span id="tab-nom-' + esc(p.uid) + '">' + esc(p.nom || 'Pièce ' + (k + 1)) + '</span></button>';
+      // Sous-onglets de l'onglet ouvert : sections ou pièces, pour y aller directement.
+      var liste = on ? sousOnglets(o) : [];
+      if (liste.length || (on && o.id === 'pieces' && parPiece())) {
+        var courant = sousCourant(liste);
+        html += '<div class="subtabs" role="group" aria-label="' + esc(libelleOnglet(o)) + '">' +
+          liste.map(function (sc) {
+            return '<button type="button" class="subtab" data-cible="' + esc(sc.cible) + '" aria-current="' + (sc.cible === courant) + '">' +
+              '<span' + (sc.nomId ? ' id="' + esc(sc.nomId) + '"' : '') + '>' + esc(sc.label) + '</span></button>';
           }).join('') +
-          '<button type="button" class="subtab add" data-action-nav="ajouter-piece" aria-label="Ajouter une pièce">+ Pièce</button>' +
+          (o.id === 'pieces' ? '<button type="button" class="subtab add" data-action-nav="ajouter-piece" aria-label="Ajouter une pièce">+ Pièce</button>' : '') +
           '</div>';
       }
       return html;
     }).join('');
   }
 
-  function contenuOnglet(id) {
-    switch (id) {
-      case 'client': return renderClient();
-      case 'climat': return renderClimat();
-      case 'installation': return renderInstallation();
-      case 'prime': return renderPrime();
-      case 'pieces':
-        if (!parPiece()) return renderMode() + renderGlobal();
-        // Toutes les pièces à la suite ; les sous-onglets y mènent directement.
-        return renderMode() +
-          '<div class="pieces-head"><h2>Pièces</h2><span class="muted" id="nb-pieces"></span></div>' +
-          (state.pieces.length ? state.pieces.map(renderPiece).join('') : '<p class="muted">Aucune pièce : en ajouter une.</p>') +
-          '<button type="button" class="btn add-piece" data-action="ajouter-piece">+ Ajouter une pièce</button>';
-      default: return renderSysteme();
+  function contenuOnglet(o) {
+    if (o.sections) {
+      return o.sections.map(function (sc) { return '<div class="ancre" id="sec-' + sc.id + '">' + sc.rendu() + '</div>'; }).join('');
     }
+    if (o.id === 'prime') return renderPrime();
+    if (!parPiece()) return renderMode() + renderGlobal();
+    // Toutes les pièces à la suite ; les sous-onglets y mènent directement.
+    return renderMode() +
+      '<div class="pieces-head"><h2>Pièces</h2><span class="muted" id="nb-pieces"></span></div>' +
+      (state.pieces.length ? state.pieces.map(renderPiece).join('') : '<p class="muted">Aucune pièce : en ajouter une.</p>') +
+      '<button type="button" class="btn add-piece" data-action="ajouter-piece">+ Ajouter une pièce</button>';
   }
 
   // Boutons « précédent / suivant » en bas de l'onglet.
@@ -701,48 +712,54 @@
     return '<div class="tabs-suite">' + bPrec + bSuiv + '</div>';
   }
 
-  // Sous-onglet de la pièce affichée.
-  function marquerPiece(id) {
-    ui.piece = id;
-    document.querySelectorAll('#onglets .subtab[data-piece]').forEach(function (b) {
-      b.setAttribute('aria-current', String(b.dataset.piece === id));
+  // Sous-onglet de l'élément affiché.
+  function marquer(cible) {
+    ui.sous = cible;
+    document.querySelectorAll('#onglets .subtab[data-cible]').forEach(function (b) {
+      b.setAttribute('aria-current', String(b.dataset.cible === cible));
     });
   }
 
-  // Fait défiler jusqu'à la pièce (sous l'en-tête collé en haut).
-  function allerPiece(id, doux) {
-    var el = document.getElementById('piece-' + id);
+  // Fait défiler jusqu'à l'élément (sous l'en-tête collé en haut).
+  function allerA(cible, doux) {
+    var el = document.getElementById(cible);
     if (!el) return;
-    marquerPiece(id);
+    marquer(cible);
     suiviPause = Date.now() + (doux ? 800 : 100);
     el.scrollIntoView({ behavior: doux ? 'smooth' : 'auto', block: 'start' });
   }
 
-  function changerPiece(id) {
-    allerPiece(id, true);
+  function allerPiece(uid, doux) {
+    allerA('piece-' + uid, doux);
   }
 
-  // Au défilement, le sous-onglet suit la pièce visible en haut de l'écran.
+  // Au défilement, le sous-onglet suit l'élément visible en haut de l'écran.
   var suiviPause = 0;
-  function suivrePieces() {
-    if (ongletActif().id !== 'pieces' || !parPiece() || Date.now() < suiviPause) return;
+  function suivreDefilement() {
+    if (Date.now() < suiviPause) return;
+    var liste = sousOnglets(ongletActif());
+    if (!liste.length) return;
     var haut = (document.querySelector('.topbar') || { offsetHeight: 0 }).offsetHeight + 60;
-    var courante = null;
-    state.pieces.forEach(function (p) {
-      var el = document.getElementById('piece-' + p.uid);
-      if (el && el.getBoundingClientRect().top <= haut) courante = p.uid;
+    var courant = liste[0].cible;
+    liste.forEach(function (sc) {
+      var el = document.getElementById(sc.cible);
+      if (el && el.getBoundingClientRect().top <= haut) courant = sc.cible;
     });
-    if (!courante && state.pieces.length) courante = state.pieces[0].uid;
-    if (courante && courante !== ui.piece) marquerPiece(courante);
+    // En bas de page, le dernier élément (souvent court) devient le courant.
+    if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4 && window.scrollY > 0) {
+      courant = liste[liste.length - 1].cible;
+    }
+    if (courant !== ui.sous) marquer(courant);
   }
   window.addEventListener('scroll', function () {
-    if (suivrePieces.attente) return;
-    suivrePieces.attente = true;
-    requestAnimationFrame(function () { suivrePieces.attente = false; suivrePieces(); });
+    if (suivreDefilement.attente) return;
+    suivreDefilement.attente = true;
+    requestAnimationFrame(function () { suivreDefilement.attente = false; suivreDefilement(); });
   }, { passive: true });
 
   function changerOnglet(id, focus) {
     ui.onglet = id;
+    ui.sous = null;
     ecrire(CLE_ONGLET, id);
     window.scrollTo(0, 0);
     render();
@@ -754,10 +771,10 @@
 
   var nav = document.getElementById('onglets');
   nav.addEventListener('click', function (e) {
-    var b = e.target.closest('[data-onglet], [data-piece], [data-action-nav]');
+    var b = e.target.closest('[data-onglet], [data-cible], [data-action-nav]');
     if (!b) return;
     if (b.dataset.onglet) changerOnglet(b.dataset.onglet, false);
-    else if (b.dataset.piece) changerPiece(b.dataset.piece);
+    else if (b.dataset.cible) allerA(b.dataset.cible, true);
     else if (b.dataset.actionNav === 'ajouter-piece') ajouterPiece();
   });
   // Flèches haut / bas entre les onglets (rôle « tablist » vertical).
@@ -785,7 +802,7 @@
 
     nav.innerHTML = renderOnglets();
     document.getElementById('app').innerHTML =
-      contenuOnglet(ongletActif().id) + suiteOnglets() +
+      contenuOnglet(ongletActif()) + suiteOnglets() +
       '<datalist id="noms-pieces">' +
       ['Séjour', 'Salon', 'Salle à manger', 'Cuisine', 'Chambre', 'Chambre parentale', 'Bureau', 'Salle de bain', 'Salle d\'eau', 'Entrée', 'Couloir', 'Véranda', 'Buanderie']
         .map(function (n) { return '<option value="' + esc(n) + '">'; }).join('') +
@@ -1107,7 +1124,6 @@
     if (!bt) return;
 
     if (bt.dataset.onglet) { changerOnglet(bt.dataset.onglet, false); return; }
-    if (bt.dataset.piece) { changerPiece(bt.dataset.piece); return; }
 
     if (bt.dataset.set) {
       var path = bt.dataset.set;
@@ -1148,7 +1164,6 @@
         copie.radiateurs.forEach(function (r) { r.uid = uid(); });
         copie.mursIsolation.forEach(function (m) { m.uid = uid(); });
         state.pieces.splice(i + 1, 0, copie);
-        ui.piece = copie.uid;
         modification();
         render();
         allerPiece(copie.uid, false);
@@ -1158,7 +1173,7 @@
         state.pieces.splice(i, 1);
         // Affiche la pièce suivante (ou la précédente pour la dernière).
         var voisine = state.pieces[Math.min(i, state.pieces.length - 1)];
-        ui.piece = voisine ? voisine.uid : null;
+        ui.sous = voisine ? 'piece-' + voisine.uid : null;
         break;
       case 'replier':
         ui.replie[p.uid] = !ui.replie[p.uid];
@@ -1260,7 +1275,7 @@
       state.id = c.id;
       modifie = false;
       ui.replie = {};
-      ui.piece = null;
+      ui.sous = null;
       ui.detail = {};
       ecrire(CLE_BROUILLON, state);
       dlg.close();
@@ -1281,7 +1296,6 @@
   function ajouterPiece() {
     var np = nouvellePiece(state.pieces.length + 1);
     state.pieces.push(np);
-    ui.piece = np.uid;
     modification();
     render();
     allerPiece(np.uid, false);
@@ -1293,10 +1307,10 @@
     state = nouveauChantier(JSON.parse(JSON.stringify(state.climat)), state.mode, state.systeme);
     modifie = false;
     ui.replie = {};
-    ui.piece = null;
+    ui.sous = null;
     ui.detail = {};
     ecrire(CLE_BROUILLON, state);
-    changerOnglet('type', false);
+    changerOnglet('client', false);
   }
 
   /* ---------- Export PDF ---------- */

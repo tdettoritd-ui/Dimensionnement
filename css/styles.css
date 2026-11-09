@@ -586,4 +586,4 @@ table.mini tr.total th { color: var(--text); }
 .pdf-choix .btn span { font-size: .82rem; font-weight: 400; opacity: .85; }
 
 /* Pièces à la suite : un sous-onglet amène la pièce juste sous l'en-tête. */
-section.piece { scroll-margin-top: calc(var(--top-h, 60px) + 8px); }
+section.piece, .ancre { scroll-margin-top: calc(var(--top-h, 60px) + 8px); }
