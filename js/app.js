@@ -994,7 +994,10 @@
     ui.sous = null;
     ecrire(CLE_ONGLET, id);
     window.scrollTo(0, 0);
+    sansRecalage = true;
     render();
+    sansRecalage = false;
+    dernierTouche = null;
     if (focus) {
       var b = document.querySelector('#onglets [data-onglet="' + id + '"]');
       if (b) b.focus();
@@ -1024,7 +1027,50 @@
   }
   window.addEventListener('resize', hauteurEntete);
 
+  /* ---------- Page immobile pendant les mises à jour ---------- */
+
+  // Dernier élément touché, et sa position à l'écran : après reconstruction de la page, on fait
+  // défiler pour le remettre au même endroit (la page ne « saute » plus quand on appuie sur un bouton).
+  var dernierTouche = null;
+  function noterTouche(e) {
+    var el = e.target.closest && e.target.closest('button, input, select, textarea, label');
+    if (!el || !app.contains(el)) return;
+    dernierTouche = { cle: cleElement(el), top: el.getBoundingClientRect().top, quand: Date.now() };
+  }
+  document.addEventListener('pointerdown', noterTouche, true);
+  document.addEventListener('keydown', noterTouche, true);
+
+  // Sélecteur retrouvant le même élément après reconstruction (ou, à défaut, son bloc : pièce, section).
+  function cleElement(el) {
+    var d = el.dataset || {};
+    var attrs = ['set', 'value', 'bind', 'action', 'base', 'i', 'j', 'cible', 'onglet', 'pdf', 'planAjout'];
+    var sel = attrs.filter(function (a) { return d[a] !== undefined; }).map(function (a) {
+      return '[data-' + a.replace(/[A-Z]/g, function (m) { return '-' + m.toLowerCase(); }) + '="' + String(d[a]).replace(/"/g, '\\"') + '"]';
+    }).join('');
+    var bloc = el.closest('section.piece, .ancre, section.card');
+    return { sel: sel || null, bloc: bloc && bloc.id ? '#' + bloc.id : null };
+  }
+
+  function ancreActuelle() {
+    if (dernierTouche && Date.now() - dernierTouche.quand < 2000) return dernierTouche;
+    var a = document.activeElement;
+    if (a && a !== document.body && app.contains(a)) return { cle: cleElement(a), top: a.getBoundingClientRect().top };
+    return null;
+  }
+
+  function recaler(ancre) {
+    if (!ancre) return;
+    var el = (ancre.cle.sel && document.querySelector('#app ' + ancre.cle.sel)) || (ancre.cle.bloc && document.querySelector(ancre.cle.bloc));
+    if (!el) return;
+    var ecart = el.getBoundingClientRect().top - ancre.top;
+    if (Math.abs(ecart) > 1) window.scrollBy(0, ecart);
+    dernierTouche = { cle: ancre.cle, top: ancre.top, quand: Date.now() };
+  }
+
+  var sansRecalage = false; // changement d'onglet : on part du haut de la page
+
   function render() {
+    var ancre = sansRecalage ? null : ancreActuelle();
     var actif = document.activeElement;
     var focusBind = actif && actif.dataset ? actif.dataset.bind || actif.dataset.set : null;
     var focusValue = actif && actif.dataset ? actif.dataset.value : null;
@@ -1053,6 +1099,7 @@
     }
     vignettesPlans();
     rafraichir();
+    recaler(ancre);
   }
 
   /* ---------- Résultats (mis à jour à chaque frappe, sans reconstruire les champs) ---------- */
