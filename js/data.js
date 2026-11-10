@@ -37,6 +37,11 @@
   ];
   var R_SURFACE_MUR = 0.17; // m².K/W : Rsi + Rse d'un mur extérieur
 
+  // Contre-cloison en agglo creux : résistance par épaisseur (cm → m².K/W, même λ équivalent que le parpaing).
+  var AGGLO_CONTRE_CLOISON = { 5: 0.06, 7.5: 0.09, 10: 0.12 };
+  // Lame d'air verticale non ventilée (EN ISO 6946) : épaisseur (cm) → résistance (m².K/W).
+  var LAMES_AIR = [[0, 0], [0.5, 0.11], [0.7, 0.13], [1, 0.15], [1.5, 0.17], [2.5, 0.18], [30, 0.18]];
+
   // Revêtement intérieur des murs : résistance ajoutée (m².K/W), sans isolant.
   var REVETEMENTS_MUR = [
     { id: 'aucun', label: 'Aucun / enduit ciment', r: 0 },
@@ -44,8 +49,8 @@
     { id: 'ba13', label: 'BA13 (plaque de plâtre 12,5 mm)', r: 0.05 },
     { id: 'bois', label: 'Lambris bois (≈ 1,5 cm sur tasseaux)', r: 0.12 },
     { id: 'ytong', label: 'Contre-cloison Ytong / béton cellulaire (7 cm)', r: 0.58 },
-    // Agglo creux 5 cm (≈ 0,06) + lame d'air non ventilée de 2 à 5 cm (≈ 0,16) + enduit.
-    { id: 'agglo', label: 'Contre-cloison agglo (5 cm, avec lame d\'air)', r: 0.22 }
+    // Contre-cloison agglo : résistance calculée (épaisseur de l'agglo, lame d'air ou isolant derrière).
+    { id: 'agglo', label: 'Contre-cloison agglo', r: null }
   ];
 
   // Été : écart de température équivalent des murs au soleil (ETD, K), tabulé pour 32 / 26 °C,
@@ -477,6 +482,8 @@
     TYPES_PIECE: TYPES_PIECE,
     CLIM: CLIM,
     R_SURFACE_MUR: R_SURFACE_MUR,
+    AGGLO_CONTRE_CLOISON: AGGLO_CONTRE_CLOISON,
+    LAMES_AIR: LAMES_AIR,
     REVETEMENTS_MUR: REVETEMENTS_MUR,
     SYSTEMES: SYSTEMES,
     CATALOGUE_RADIATEURS: CATALOGUE_RADIATEURS,

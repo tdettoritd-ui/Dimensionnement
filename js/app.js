@@ -60,6 +60,7 @@
       murType: 'parpaing',
       epaisseurMur: '',
       revetementMur: 'aucun',
+      agglo: { epaisseur: '5', entre: 'air', lame: '', isolant: { materiau: 'laine_verre', epaisseur: '' } },
       plancherDalle: 'beton',
       plancherLocal: 'terre_plein',
       toitureType: 'combles',
@@ -164,6 +165,9 @@
     var ancien = c.climat && D.PLANCHERS_ANCIENS[c.climat.plancherType];
     if (ancien && !c.climat.plancherDalle) { out.climat.plancherDalle = ancien[0]; out.climat.plancherLocal = ancien[1]; }
     delete out.climat.plancherType;
+    var agglo = (c.climat && c.climat.agglo) || {};
+    out.climat.agglo = Object.assign(climatDefaut().agglo, agglo);
+    out.climat.agglo.isolant = Object.assign(climatDefaut().agglo.isolant, agglo.isolant);
     ['isolantMur', 'isolantPlancher', 'isolantToiture'].forEach(function (k) {
       out.climat[k] = Object.assign({ materiau: 'aucun', epaisseur: '' }, out.climat[k]);
     });
@@ -320,6 +324,23 @@
       '</div>';
   }
 
+  // Contre-cloison agglo : épaisseur, puis lame d'air, isolant ou rien entre l'agglo et le mur.
+  function renderContreCloison() {
+    var a = state.climat.agglo;
+    var mat = a.isolant.materiau;
+    return liste('Épaisseur de l\'agglo', 'climat.agglo.epaisseur', Object.keys(D.AGGLO_CONTRE_CLOISON).map(Number).sort(function (x, y) { return x - y; })
+      .map(function (e) { return { value: String(e), label: nf(e, e % 1 ? 1 : 0) + ' cm' }; })) +
+      '<div class="spacer"></div>' +
+      bascule('Entre l\'agglo et le mur', 'climat.agglo.entre', [['air', 'Lame d\'air'], ['isolant', 'Isolant'], ['colle', 'Rien (collé)']], { obligatoire: true, cls: 'span-2' }) +
+      (a.entre === 'isolant'
+        ? '<div class="field-pair span-2">' +
+          liste('Isolant de la contre-cloison', 'climat.agglo.isolant.materiau', table2options(D.ISOLANTS)) +
+          (mat && mat !== 'aucun' ? champ('Épaisseur', 'climat.agglo.isolant.epaisseur', { kind: 'num', unite: 'cm', cls: 'narrow' }) : '') +
+          '</div>'
+        : a.entre === 'colle' ? ''
+          : champ('Épaisseur de la lame d\'air', 'climat.agglo.lame', { kind: 'num', unite: 'cm', placeholder: 'auto : 3' }));
+  }
+
   function renderClimat() {
     var c = state.climat;
     var zone = D.find(D.ZONES, c.zone);
@@ -344,6 +365,7 @@
         ? champ('Épaisseur du mur', 'climat.epaisseurMur', { kind: 'num', unite: 'cm', placeholder: 'auto : ' + C.epaisseurMur({ murType: c.murType }) })
         : '') +
       liste('Revêtement intérieur', 'climat.revetementMur', table2options(D.REVETEMENTS_MUR), { cls: 'span-2' }) +
+      (c.revetementMur === 'agglo' ? renderContreCloison() : '') +
       '<p class="hint span-2" id="r-mur"></p>' +
       isolant('murs', 'isolantMur') +
       (c.isolantMur.materiau && c.isolantMur.materiau !== 'aucun'
@@ -1255,7 +1277,7 @@
     });
 
     var u = C.uEnveloppe(state.climat);
-    setHTML('r-mur', 'R du mur hors isolant : ' + nf(C.rMur(state.climat), 2) + ' m².K/W' +
+    setHTML('r-mur', 'R du mur et du revêtement (hors « Isolant murs ») : ' + nf(C.rMur(state.climat), 2) + ' m².K/W' +
       (C.epaisseurMur(state.climat) !== null ? ' (' + nf(C.epaisseurMur(state.climat), 1) + ' cm' + (C.estVide(state.climat.epaisseurMur) ? ', épaisseur courante' : '') + ')' : '') + '.');
     setHTML('u-enveloppe', 'U mur ' + nf(u.mur, 2) + ' · U toiture ' + nf(u.toiture, 2) + ' · U plancher ' + nf(u.plancher, 2) + ' W/m².K');
     setHTML('g-global', res.volume > 0

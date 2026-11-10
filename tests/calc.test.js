@@ -547,7 +547,7 @@ test('murs : épaisseur et revêtement intérieur', () => {
   proche(C.rMur(k({ murType: 'ossature_bois', epaisseurMur: '15' })), R(D.MURS, 'ossature_bois'));
   // Revêtement intérieur ajouté.
   const rev = (id) => D.find(D.REVETEMENTS_MUR, id).r;
-  ['platre', 'ba13', 'bois', 'ytong', 'agglo'].forEach(id =>
+  ['platre', 'ba13', 'bois', 'ytong'].forEach(id =>
     proche(C.rMur(k({ murType: 'parpaing', revetementMur: id })), R(D.MURS, 'parpaing') + rev(id)));
   proche(C.uEnveloppe(k({ murType: 'parpaing', revetementMur: 'ba13', isolantMur: { materiau: 'laine_verre', epaisseur: '10' } })).mur,
     1 / (R(D.MURS, 'parpaing') + rev('ba13') + 0.10 / lambda('laine_verre')));
@@ -682,4 +682,20 @@ test('plusieurs unités extérieures : bilan par unité', () => {
   // Le total maison est inchangé ; une seule unité déclarée : pas de bilan par unité.
   proche(r.climatisation, C.calculChantier({ climat, prime: { personnes: '4' }, pieces }).climatisation);
   assert.equal(C.calculChantier({ climat, prime: {}, installation: { unites: [unites[0]] }, pieces }).unites.length, 0);
+});
+
+test('contre-cloison agglo : épaisseur, lame d\'air ou isolant', () => {
+  const k = (agglo) => ({ ...climat, murType: 'parpaing', isolantMur: { materiau: 'aucun', epaisseur: '' }, revetementMur: 'agglo', agglo });
+  const A = D.AGGLO_CONTRE_CLOISON;
+  // Défaut : agglo 5 cm + lame d'air 3 cm.
+  proche(C.rRevetement(k({})), A[5] + 0.18);
+  proche(C.rRevetement(k({ epaisseur: '10', entre: 'air', lame: '1' })), A[10] + 0.15);
+  proche(C.rLameAir('0,7'), 0.13);
+  proche(C.rLameAir('2'), 0.17 + 0.01 * 0.5);
+  proche(C.rRevetement(k({ epaisseur: '7.5', entre: 'colle' })), A[7.5]);
+  proche(C.rRevetement(k({ epaisseur: '5', entre: 'isolant', isolant: { materiau: 'laine_verre', epaisseur: '4' } })), A[5] + 0.04 / lambda('laine_verre'));
+  proche(C.rMur(k({ entre: 'colle' })), R(D.MURS, 'parpaing') + A[5]);
+  // Isolant derrière la contre-cloison : ponts thermiques en ITI ; lame d'air : mur non isolé.
+  assert.equal(C.isolationMur(k({ entre: 'isolant', isolant: { materiau: 'laine_verre', epaisseur: '4' } })), 'iti');
+  assert.equal(C.isolationMur(k({ entre: 'air' })), 'non_isole');
 });

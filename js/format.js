@@ -118,6 +118,16 @@
     return lignes.join('\n') + ' · ' + (ex.suffisant ? 'Suffisant' : 'Insuffisant (manque ' + W(ex.manque) + ')');
   }
 
+  // Revêtement intérieur des murs ; contre-cloison agglo avec son épaisseur et ce qu'il y a derrière.
+  function texteRevetement(climat) {
+    var texte = libelle(D.REVETEMENTS_MUR, climat.revetementMur).toLowerCase();
+    if (climat.revetementMur !== 'agglo') return texte;
+    var c = C.contreCloison(climat);
+    var derriere = c.entre === 'air' ? 'lame d\'air ' + nf(c.lame, c.lame % 1 ? 1 : 0) + ' cm'
+      : c.entre === 'isolant' ? isolantTexte(c.isolant).toLowerCase() : 'collée au mur';
+    return texte + ' ' + nf(c.epaisseur, c.epaisseur % 1 ? 1 : 0) + ' cm, ' + derriere + ' (R ' + nf(C.rRevetement(climat), 2) + ')';
+  }
+
   // Type d'isolation des murs (ponts thermiques), tel que renvoyé par Calc.isolationMur.
   var LIBELLES_ISOLATION = {
     non_isole: 'murs non isolés', iti: 'ITI', ite: 'ITE', itr: 'isolation répartie',
@@ -143,6 +153,7 @@
     isolantTexte: isolantTexte,
     texteEcs: texteEcs,
     lignesVitrages: lignesVitrages,
-    texteRadiateurExistant: texteRadiateurExistant
+    texteRadiateurExistant: texteRadiateurExistant,
+    texteRevetement: texteRevetement
   };
 })(this);

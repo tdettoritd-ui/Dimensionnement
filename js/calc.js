@@ -77,8 +77,47 @@
       var lambda = mur.e / 100 / (mur.r - D.R_SURFACE_MUR);
       r = D.R_SURFACE_MUR + epaisseurMur(climat) / 100 / lambda;
     }
+    return r + rRevetement(climat);
+  }
+
+  // Résistance d'une lame d'air verticale non ventilée (cm), interpolée.
+  function rLameAir(cm) {
+    var e = Math.max(num(cm), 0);
+    var T = D.LAMES_AIR;
+    for (var k = 1; k < T.length; k++) {
+      if (e <= T[k][0]) return T[k - 1][1] + (T[k][1] - T[k - 1][1]) * (e - T[k - 1][0]) / (T[k][0] - T[k - 1][0]);
+    }
+    return T[T.length - 1][1];
+  }
+
+  // Contre-cloison agglo : réglages saisis, complétés par défaut (5 cm, lame d'air de 3 cm).
+  function contreCloison(climat) {
+    var a = climat.agglo || {};
+    return {
+      epaisseur: D.AGGLO_CONTRE_CLOISON[num(a.epaisseur)] !== undefined ? num(a.epaisseur) : 5,
+      entre: a.entre === 'isolant' || a.entre === 'colle' ? a.entre : 'air',
+      lame: estVide(a.lame) ? 3 : Math.max(num(a.lame), 0),
+      isolant: a.isolant || { materiau: 'aucun', epaisseur: '' }
+    };
+  }
+
+  // Résistance ajoutée par le revêtement intérieur (contre-cloison agglo : agglo + lame d'air ou isolant).
+  function rRevetement(climat) {
     var rev = D.find(D.REVETEMENTS_MUR, climat.revetementMur);
-    return r + (rev ? rev.r : 0);
+    if (!rev) return 0;
+    if (rev.id !== 'agglo') return rev.r;
+    var c = contreCloison(climat);
+    var r = D.AGGLO_CONTRE_CLOISON[c.epaisseur];
+    if (c.entre === 'air') r += rLameAir(c.lame);
+    else if (c.entre === 'isolant') r += rIsolant(c.isolant);
+    return r;
+  }
+
+  // Isolant placé derrière une contre-cloison agglo (isolation par l'intérieur).
+  function isolantContreCloison(climat) {
+    if (climat.revetementMur !== 'agglo') return 0;
+    var c = contreCloison(climat);
+    return c.entre === 'isolant' ? rIsolant(c.isolant) : 0;
   }
 
   function uEnveloppe(climat) {
@@ -324,8 +363,10 @@
   // Position non renseignée : par l'intérieur (cas le plus courant, défaut 3CL).
   function isolationMur(climat) {
     var mur = D.find(D.MURS, climat.murType) || {};
-    if (!(rIsolant(climat.isolantMur) > 0)) return mur.itr ? 'itr' : 'non_isole';
-    var position = climat.positionIsolantMur === 'exterieur' ? 'ite' : 'iti';
+    var iso = rIsolant(climat.isolantMur) > 0;
+    // Isolant derrière une contre-cloison agglo : isolation par l'intérieur.
+    if (!iso && !(isolantContreCloison(climat) > 0)) return mur.itr ? 'itr' : 'non_isole';
+    var position = iso && climat.positionIsolantMur === 'exterieur' ? 'ite' : 'iti';
     return mur.itr ? position + '_itr' : position;
   }
 
@@ -895,6 +936,9 @@
     mursIsolationPiece: mursIsolationPiece,
     epaisseurMur: epaisseurMur,
     rMur: rMur,
+    rRevetement: rRevetement,
+    rLameAir: rLameAir,
+    contreCloison: contreCloison,
     plancherBas: plancherBas,
     uVitrage: uVitrage,
     debitEstime: debitEstime,
