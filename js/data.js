@@ -43,7 +43,9 @@
     { id: 'platre', label: 'Enduit plâtre (≈ 1,5 cm)', r: 0.03 },
     { id: 'ba13', label: 'BA13 (plaque de plâtre 12,5 mm)', r: 0.05 },
     { id: 'bois', label: 'Lambris bois (≈ 1,5 cm sur tasseaux)', r: 0.12 },
-    { id: 'ytong', label: 'Contre-cloison Ytong / béton cellulaire (7 cm)', r: 0.58 }
+    { id: 'ytong', label: 'Contre-cloison Ytong / béton cellulaire (7 cm)', r: 0.58 },
+    // Agglo creux 5 cm (≈ 0,06) + lame d'air non ventilée de 2 à 5 cm (≈ 0,16) + enduit.
+    { id: 'agglo', label: 'Contre-cloison agglo (5 cm, avec lame d\'air)', r: 0.22 }
   ];
 
   // Été : écart de température équivalent des murs au soleil (ETD, K), tabulé pour 32 / 26 °C,

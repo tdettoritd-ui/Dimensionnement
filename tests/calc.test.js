@@ -547,7 +547,7 @@ test('murs : épaisseur et revêtement intérieur', () => {
   proche(C.rMur(k({ murType: 'ossature_bois', epaisseurMur: '15' })), R(D.MURS, 'ossature_bois'));
   // Revêtement intérieur ajouté.
   const rev = (id) => D.find(D.REVETEMENTS_MUR, id).r;
-  ['platre', 'ba13', 'bois', 'ytong'].forEach(id =>
+  ['platre', 'ba13', 'bois', 'ytong', 'agglo'].forEach(id =>
     proche(C.rMur(k({ murType: 'parpaing', revetementMur: id })), R(D.MURS, 'parpaing') + rev(id)));
   proche(C.uEnveloppe(k({ murType: 'parpaing', revetementMur: 'ba13', isolantMur: { materiau: 'laine_verre', epaisseur: '10' } })).mur,
     1 / (R(D.MURS, 'parpaing') + rev('ba13') + 0.10 / lambda('laine_verre')));
