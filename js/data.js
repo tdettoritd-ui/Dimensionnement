@@ -58,6 +58,187 @@
   // (conduction transitoire 1D, température sol-air du 21 juillet à Sarreguemines, ciel clair).
   var ETD_MURS = { lourd: 6, moyen_non_isole: 12, moyen_iti: 9, moyen_ite: 7, leger: 12 };
 
+  // NF EN 12831 / annexe nationale NF P52-612/CN (relevé Thermexcel) : température extérieure de base
+  // au niveau de la mer par département (°C), puis correction selon l'altitude et la distance à la côte.
+  var DEPARTEMENTS = [
+    { id: '01', label: '01 Ain', t: -10 },
+    { id: '02', label: '02 Aisne', t: -7 },
+    { id: '03', label: '03 Allier', t: -8 },
+    { id: '04', label: '04 Alpes-de-Haute-Provence', t: -8 },
+    { id: '05', label: '05 Hautes-Alpes', t: -10 },
+    { id: '06', label: '06 Alpes-Maritimes', t: -5 },
+    { id: '07', label: '07 Ardèche', t: -6 },
+    { id: '08', label: '08 Ardennes', t: -10 },
+    { id: '09', label: '09 Ariège', t: -5 },
+    { id: '10', label: '10 Aube', t: -10 },
+    { id: '11', label: '11 Aude', t: -5 },
+    { id: '12', label: '12 Aveyron', t: -8 },
+    { id: '13', label: '13 Bouches-du-Rhône', t: -5 },
+    { id: '14', label: '14 Calvados', t: -7 },
+    { id: '15', label: '15 Cantal', t: -8 },
+    { id: '16', label: '16 Charente', t: -5 },
+    { id: '17', label: '17 Charente-Maritime', t: -5 },
+    { id: '18', label: '18 Cher', t: -7 },
+    { id: '19', label: '19 Corrèze', t: -8 },
+    { id: '20', label: '20 Corse (2A, 2B)', t: -2 },
+    { id: '21', label: '21 Côte-d\'Or', t: -10 },
+    { id: '22', label: '22 Côtes-d\'Armor', t: -4 },
+    { id: '23', label: '23 Creuse', t: -8 },
+    { id: '24', label: '24 Dordogne', t: -5 },
+    { id: '25', label: '25 Doubs', t: -12 },
+    { id: '26', label: '26 Drôme', t: -6 },
+    { id: '27', label: '27 Eure', t: -7 },
+    { id: '28', label: '28 Eure-et-Loir', t: -7 },
+    { id: '29', label: '29 Finistère', t: -4 },
+    { id: '30', label: '30 Gard', t: -5 },
+    { id: '31', label: '31 Haute-Garonne', t: -5 },
+    { id: '32', label: '32 Gers', t: -5 },
+    { id: '33', label: '33 Gironde', t: -5 },
+    { id: '34', label: '34 Hérault', t: -5 },
+    { id: '35', label: '35 Ille-et-Vilaine', t: -4 },
+    { id: '36', label: '36 Indre', t: -7 },
+    { id: '37', label: '37 Indre-et-Loire', t: -7 },
+    { id: '38', label: '38 Isère', t: -10 },
+    { id: '39', label: '39 Jura', t: -10 },
+    { id: '40', label: '40 Landes', t: -5 },
+    { id: '41', label: '41 Loir-et-Cher', t: -7 },
+    { id: '42', label: '42 Loire', t: -10 },
+    { id: '43', label: '43 Haute-Loire', t: -8 },
+    { id: '44', label: '44 Loire-Atlantique', t: -5 },
+    { id: '45', label: '45 Loiret', t: -7 },
+    { id: '46', label: '46 Lot', t: -6 },
+    { id: '47', label: '47 Lot-et-Garonne', t: -5 },
+    { id: '48', label: '48 Lozère', t: -8 },
+    { id: '49', label: '49 Maine-et-Loire', t: -7 },
+    { id: '50', label: '50 Manche', t: -4 },
+    { id: '51', label: '51 Marne', t: -10 },
+    { id: '52', label: '52 Haute-Marne', t: -12 },
+    { id: '53', label: '53 Mayenne', t: -7 },
+    { id: '54', label: '54 Meurthe-et-Moselle', t: -15 },
+    { id: '55', label: '55 Meuse', t: -12 },
+    { id: '56', label: '56 Morbihan', t: -4 },
+    { id: '57', label: '57 Moselle', t: -15 },
+    { id: '58', label: '58 Nièvre', t: -10 },
+    { id: '59', label: '59 Nord', t: -9 },
+    { id: '60', label: '60 Oise', t: -7 },
+    { id: '61', label: '61 Orne', t: -7 },
+    { id: '62', label: '62 Pas-de-Calais', t: -9 },
+    { id: '63', label: '63 Puy-de-Dôme', t: -8 },
+    { id: '64', label: '64 Pyrénées-Atlantiques', t: -5 },
+    { id: '65', label: '65 Hautes-Pyrénées', t: -5 },
+    { id: '66', label: '66 Pyrénées-Orientales', t: -5 },
+    { id: '67', label: '67 Bas-Rhin', t: -15 },
+    { id: '68', label: '68 Haut-Rhin', t: -15 },
+    { id: '69', label: '69 Rhône', t: -10 },
+    { id: '70', label: '70 Haute-Saône', t: -10 },
+    { id: '71', label: '71 Saône-et-Loire', t: -10 },
+    { id: '72', label: '72 Sarthe', t: -7 },
+    { id: '73', label: '73 Savoie', t: -10 },
+    { id: '74', label: '74 Haute-Savoie', t: -10 },
+    { id: '75', label: '75 Paris', t: -5 },
+    { id: '76', label: '76 Seine-Maritime', t: -7 },
+    { id: '77', label: '77 Seine-et-Marne', t: -7 },
+    { id: '78', label: '78 Yvelines', t: -7 },
+    { id: '79', label: '79 Deux-Sèvres', t: -7 },
+    { id: '80', label: '80 Somme', t: -9 },
+    { id: '81', label: '81 Tarn', t: -5 },
+    { id: '82', label: '82 Tarn-et-Garonne', t: -5 },
+    { id: '83', label: '83 Var', t: -5 },
+    { id: '84', label: '84 Vaucluse', t: -6 },
+    { id: '85', label: '85 Vendée', t: -5 },
+    { id: '86', label: '86 Vienne', t: -7 },
+    { id: '87', label: '87 Haute-Vienne', t: -8 },
+    { id: '88', label: '88 Vosges', t: -15 },
+    { id: '89', label: '89 Yonne', t: -10 },
+    { id: '90', label: '90 Territoire de Belfort', t: -15 },
+    { id: '91', label: '91 Essonne', t: -7 },
+    { id: '92', label: '92 Hauts-de-Seine', t: -7 },
+    { id: '93', label: '93 Seine-Saint-Denis', t: -7 },
+    { id: '94', label: '94 Val-de-Marne', t: -7 },
+    { id: '95', label: '95 Val-d\'Oise', t: -7 }
+  ];
+
+  // Correction d'altitude : colonne = température de base du département au niveau de la mer ;
+  // valeurs [côte < 25 km, 0-200 m, 201-400, 401-500, 501-600, …, 2801-3000, au-dessus] ; null : hors tableau.
+  var ALTITUDE_BASE = {
+    bornes: [200, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900, 2000, 2100, 2200, 2400, 2600, 2800, 3000, Infinity],
+    colonnes: {
+      '-2': [-2, -2, -3, -4, -4, -5, -6, -6, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+      '-4': [-2, -4, -5, -6, -6, -7, -7, -8, -8, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+      '-5': [-4, -5, -6, -7, -7, -8, -8, -9, -9, -10, -10, -11, -11, -12, -12, -13, -13, -14, -14, -15, -15, -16, -17, -18, -19, -20],
+      '-6': [null, -6, -7, -8, -9, -10, -11, -12, -13, -14, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+      '-7': [-5, -7, -8, -9, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+      '-8': [null, -8, -9, -10, -11, -12, -13, -14, -15, -16, -17, -18, -19, null, null, null, null, null, null, null, null, null, null, null, null, null],
+      '-9': [-7, -9, -10, -11, -12, -13, -14, -15, -16, -17, -18, -19, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+      '-10': [null, -10, -11, -12, -13, -14, -15, -16, -17, -18, -19, -20, -21, -22, -23, -24, -25, -26, -27, -28, -29, -30, -30, -30, -30, -30],
+      '-12': [null, -12, -13, -14, -15, -16, -17, -18, -19, -20, -21, -22, -23, -24, null, null, null, null, null, null, null, null, null, null, null, null],
+      '-15': [null, -15, -15, -16, -17, -18, -19, -20, -21, -22, -23, -24, -25, -25, null, null, null, null, null, null, null, null, null, null, null, null]
+    }
+  };
+
+  // Moyenne annuelle de la température extérieure θm,e selon la température de base θe (sol, fg2).
+  var TEMPERATURE_MOYENNE = [[-2, 13], [-5, 12], [-8, 11], [-11, 10], [-14, 9], [-18, 8], [-22, 7], [-26, 6], [-Infinity, 5]];
+
+  // Sol (EN ISO 13370, méthode simplifiée de la NF EN 12831) : plancher sur terre-plein au niveau du sol.
+  // U équivalent (W/m².K) selon U du plancher (colonnes) et B' = surface / (0,5 × périmètre) (lignes).
+  var SOL = {
+    fg1: 1.45, // variation annuelle de la température extérieure (valeur par défaut de la norme)
+    gw: 1,     // nappe phréatique à plus de 1 m sous la dalle
+    u: [3, 2, 1, 0.5, 0.25],
+    b: [2, 4, 6, 8, 10, 12, 14, 16, 18, 20],
+    uEquiv: [
+      [1.3, 0.77, 0.55, 0.33, 0.17],
+      [0.88, 0.59, 0.45, 0.3, 0.17],
+      [0.68, 0.48, 0.38, 0.27, 0.17],
+      [0.55, 0.41, 0.33, 0.25, 0.16],
+      [0.47, 0.36, 0.3, 0.23, 0.15],
+      [0.41, 0.32, 0.27, 0.21, 0.14],
+      [0.37, 0.29, 0.24, 0.19, 0.14],
+      [0.33, 0.26, 0.22, 0.18, 0.13],
+      [0.31, 0.24, 0.21, 0.17, 0.12],
+      [0.28, 0.22, 0.19, 0.16, 0.12]
+    ]
+  };
+
+  // Murs sur local non chauffé : facteur de réduction de température bu (NF EN 12831, valeurs forfaitaires).
+  var LOCAUX_NON_CHAUFFES = [
+    { id: 'piece_1', label: 'Local avec 1 seule paroi extérieure', b: 0.4 },
+    { id: 'piece_2', label: 'Local avec 2 parois extérieures, sans porte extérieure', b: 0.5 },
+    { id: 'garage', label: 'Local avec 2 murs extérieurs et portes extérieures (entrée, garage)', b: 0.6 },
+    { id: 'piece_3', label: 'Local avec 3 murs extérieurs ou plus (escalier extérieur…)', b: 0.8 },
+    { id: 'sous_sol', label: 'Sous-sol sans fenêtre ni porte extérieure', b: 0.5 },
+    { id: 'sous_sol_ouvert', label: 'Sous-sol avec fenêtres ou portes extérieures', b: 0.8 },
+    { id: 'comble_ventile', label: 'Comble fortement ventilé (tuiles sans écran)', b: 1 },
+    { id: 'comble', label: 'Comble, toiture non isolée', b: 0.9 },
+    { id: 'comble_isole', label: 'Comble, toiture isolée', b: 0.7 },
+    { id: 'logement', label: 'Logement voisin chauffé', b: 0 }
+  ];
+
+  // Ventilation (NF EN 12831) : taux minimal d'air neuf hygiénique (vol/h) par type de pièce.
+  var NMIN = { defaut: 0.5, humide: 1.5 };
+  var MOTIF_PIECE_HUMIDE = /cuisine|bain|salle d.eau|douche/i;
+
+  // Étanchéité à l'air de l'enveloppe : n50 (vol/h sous 50 Pa), maisons individuelles ; valeur retenue par classe.
+  var ETANCHEITES = [
+    { id: 'elevee', label: 'Élevée : menuiseries récentes, joints de qualité (n50 < 4)', n50: 3 },
+    { id: 'moyenne', label: 'Moyenne : double vitrage, joints normaux (n50 4 à 10)', n50: 7 },
+    { id: 'faible', label: 'Faible : simple vitrage, sans joints (n50 > 10)', n50: 12 }
+  ];
+
+  // Coefficient d'exposition au vent e : [sans façade exposée, 1 façade, plusieurs façades].
+  var EXPOSITIONS = [
+    { id: 'non_abrite', label: 'Site non abrité (bord de mer, rase campagne)', e: [0.01, 0.03, 0.05] },
+    { id: 'modere', label: 'Site moyennement abrité (campagne avec arbres, banlieue)', e: [0.01, 0.02, 0.03] },
+    { id: 'abrite', label: 'Site très abrité (centre-ville, forêt)', e: [0.01, 0.01, 0.02] }
+  ];
+
+  // Débit d'extraction moyen de la VMC (m³/h, arrêté du 24/03/1982, Thermexcel) selon le nombre de pièces
+  // principales (F1 à F6) : [1 SdB + 1 WC, 1 SdB + 2 WC, 2 SdB + 1 WC, 2 SdB + 2 WC].
+  var DEBITS_VMC = {
+    simple: { 1: [55, 55, 55, 55], 2: [65, 80, 80, 95], 3: [95, 110, 110, 125], 4: [111, 111, 126, 126], 5: [113, 113, 128, 128], 6: [113, 113, 128, 128] },
+    double: { 1: [55, 55, 55, 55], 2: [65, 80, 80, 95], 3: [95, 110, 125, 140], 4: [111, 111, 141, 141], 5: [113, 113, 143, 143], 6: [113, 113, 143, 143] }
+  };
+
   // Résistance de base toiture (m².K/W) — r null : U = 0.
   // etd : écart équivalent d'été (K, pour 32 / 26 °C) : combles chauds (≈ 42 °C), rampants et terrasse
   // au soleil (Manual J 8, bilan des combles ventilés, conduction transitoire) ; leger : pièce légère.
@@ -246,7 +427,8 @@
   var VENTILATIONS = [
     { id: 'aucune', label: 'Pas de VMC (fenêtres / infiltrations)', taux: 0.5 },
     { id: 'vmc_auto', label: 'VMC auto-réglable', taux: 0.6 },
-    { id: 'vmc_hygro', label: 'VMC hygroréglable', taux: 0.45 }
+    { id: 'vmc_hygro', label: 'VMC hygroréglable', taux: 0.45 },
+    { id: 'double_flux', label: 'VMC double flux (récupération de chaleur)', taux: 0.45, doubleFlux: true }
   ];
 
   // Paliers commerciaux PAC / clim (kW)
@@ -481,6 +663,16 @@
     ETD_MURS: ETD_MURS,
     TYPES_PIECE: TYPES_PIECE,
     CLIM: CLIM,
+    DEPARTEMENTS: DEPARTEMENTS,
+    ALTITUDE_BASE: ALTITUDE_BASE,
+    TEMPERATURE_MOYENNE: TEMPERATURE_MOYENNE,
+    SOL: SOL,
+    LOCAUX_NON_CHAUFFES: LOCAUX_NON_CHAUFFES,
+    NMIN: NMIN,
+    MOTIF_PIECE_HUMIDE: MOTIF_PIECE_HUMIDE,
+    ETANCHEITES: ETANCHEITES,
+    EXPOSITIONS: EXPOSITIONS,
+    DEBITS_VMC: DEBITS_VMC,
     R_SURFACE_MUR: R_SURFACE_MUR,
     AGGLO_CONTRE_CLOISON: AGGLO_CONTRE_CLOISON,
     LAMES_AIR: LAMES_AIR,

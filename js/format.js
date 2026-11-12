@@ -118,6 +118,15 @@
     return lignes.join('\n') + ' · ' + (ex.suffisant ? 'Suffisant' : 'Insuffisant (manque ' + W(ex.manque) + ')');
   }
 
+  // Département, altitude et côte (température de base de l'annexe nationale), sinon l'ancienne zone.
+  function texteLocalisation(climat) {
+    var dep = D.find(D.DEPARTEMENTS, climat.departement);
+    if (!dep) return libelle(D.ZONES, climat.zone);
+    var tb = C.temperatureBase(climat);
+    return dep.label + (C.num(climat.altitude) > 0 ? ', ' + nf(C.num(climat.altitude)) + ' m' : '') +
+      (climat.cote === 'oui' ? ', côte < 25 km' : '') + (tb ? ' (base ' + tb.t + ' °C)' : '');
+  }
+
   // Revêtement intérieur des murs ; contre-cloison agglo avec son épaisseur et ce qu'il y a derrière.
   function texteRevetement(climat) {
     var texte = libelle(D.REVETEMENTS_MUR, climat.revetementMur).toLowerCase();
@@ -154,6 +163,7 @@
     texteEcs: texteEcs,
     lignesVitrages: lignesVitrages,
     texteRadiateurExistant: texteRadiateurExistant,
-    texteRevetement: texteRevetement
+    texteRevetement: texteRevetement,
+    texteLocalisation: texteLocalisation
   };
 })(this);

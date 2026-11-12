@@ -241,7 +241,7 @@
       // Version client : logement et installation prévue, sans l'enveloppe ni les cotes de chantier.
       paire(
         ['Votre logement', [
-          ['Zone climatique', F.libelle(D.ZONES, k.zone)],
+          ['Localisation', F.texteLocalisation(k)],
           ['Température extérieure de base', k.tBaseHiver + ' °C'],
           ['Confort hiver / été', k.tConfortHiver + ' °C / ' + k.tConfortEte + ' °C'],
           ['Surface chauffée', F.nf(sommeListe(res.pieces, function (r) { return r.surface; }), 1) + ' m²'],
@@ -258,7 +258,7 @@
       );
     } else paire(
       ['Climat / enveloppe', [
-        ['Zone', F.libelle(D.ZONES, k.zone)],
+        ['Localisation', F.texteLocalisation(k)],
         ['Base hiver / été', k.tBaseHiver + ' °C / ' + k.tBaseEte + ' °C'],
         ['Confort hiver / été', k.tConfortHiver + ' °C / ' + k.tConfortEte + ' °C'],
         ['Surpuissance de relance', (C.estVide(k.surpuissance) ? '0' : k.surpuissance) + ' %'],
@@ -274,7 +274,11 @@
         })()],
         ['Planchers entre étages', F.libelle(D.PLANCHERS_ETAGE, k.plancherEtage || 'lourd')],
         ['Toiture', F.libelle(D.TOITURES, k.toitureType) + (k.toitureType !== 'aucune' ? ' + ' + F.isolantTexte(k.isolantToiture) : '') + ' (U ' + F.nf(u.toiture, 2) + ')'],
-        ['Ventilation', F.libelle(D.VENTILATIONS, k.ventilation)]
+        ['Ventilation', F.libelle(D.VENTILATIONS, k.ventilation) +
+          (k.ventilation === 'double_flux' ? ' (rendement ' + (C.estVide(k.rendementDF) ? '80' : k.rendementDF) + ' %)' : '') +
+          (res.ventilation.vex > 0 ? ' – débit extrait ' + F.nf(res.ventilation.vex) + ' m³/h' + (res.ventilation.vexAuto ? ' (F' + res.ventilation.piecesPrincipales + ', arrêté 1982)' : '') : '')],
+        ['Étanchéité / exposition', (C.num(k.n50) > 0 ? 'n50 mesuré ' + k.n50 + ' vol/h' : F.libelle(D.ETANCHEITES, k.etancheite || 'moyenne')) +
+          ' – ' + F.libelle(D.EXPOSITIONS, k.exposition || 'modere')]
       ]],
       ['Installation', [
         ['Type d\'installation', F.libelle(D.SYSTEMES, res.systeme)],
@@ -416,7 +420,14 @@
           : ''],
         ['Vitrages', vitrages.length ? vitrages.join('\n') : '—'],
         ['Occupants / équipements', F.nf(r.clim.occupants, 1) + ' (' + F.libelle(D.ACTIVITES, p.activite) + ') · ' + F.W(r.clim.equipements)],
-        ['Ventilation', F.nf(r.debit, 1) + ' m³/h' + (r.debitAuto ? ' (estimé)' : '')],
+        ['Ventilation', F.nf(r.debit, 1) + ' m³/h retenus (infiltrations ' + F.nf(r.ventilation.vinf, 1) + ' + VMC ' + F.nf(r.ventilation.vmech, 1) +
+          (r.ventilation.fv < 1 ? ' × ' + F.nf(r.ventilation.fv, 2) : '') +
+          (r.ventilation.complement > 0 ? ' + minimum hygiénique ' + F.nf(r.ventilation.complement, 1) : '') + ')'],
+        ['Murs sur local non chauffé', (r.paroisLnc || []).map(function (pl) {
+          return F.nf(pl.surface, 1) + ' m² sur ' + pl.local.label.toLowerCase() + ' (b ' + F.nf(pl.local.b, 1) + ')';
+        }).join('\n')],
+        ['Sol (terre-plein)', r.sol ? 'U équivalent ' + F.nf(r.sol.uEquiv, 2) + ' (B\' ' + F.nf(r.sol.bPrime, 1) + (r.sol.parBatiment ? ', bâtiment' : '') +
+          ') × fg1 ' + F.nf(D.SOL.fg1, 2) + ' × fg2 ' + F.nf(r.sol.fg2, 2) + ' = ' + F.nf(r.sol.u, 2) + ' W/m².K' : ''],
         ['Climatisation', F.W(r.clim.sensible) + ' sensible + ' + F.W(r.clim.latent) + ' latent -> ' + F.W(r.climatisation) +
           ' nominal' + (p.virtuel ? '' : ' · split ' + F.textePalierSplit(r.palierSplit)) +
           ' (' + F.nf(r.clim.occupants) + ' occupant' + (r.clim.occupants > 1 ? 's' : '') + ', équipements ' + F.W(r.clim.equipements) + ')'],
@@ -426,7 +437,7 @@
         ['Radiateur neuf préconisé', F.textePalierRadiateur(r.radiateurNeuf) +
           (r.facteurRegime !== 1 && r.radiateurNeuf.valeur ? ', soit ' + F.W(r.radiateurNeuf.valeur * r.facteurRegime) + ' en ' + ins.regimeEau + ' °C' : '')],
         ['Radiateurs existants', F.texteRadiateurExistant(p, r, ins.regimeEau)]
-      ].filter(function (l) { return !((p.virtuel || airAir) && /^Radiateur/.test(l[0])) && !(l[0] === 'Isolation des murs' && !l[1]); })
+      ].filter(function (l) { return !((p.virtuel || airAir) && /^Radiateur/.test(l[0])) && !(/^(Isolation des murs|Murs sur local|Sol)/.test(l[0]) && !l[1]); })
         .map(function (l) { return [t(l[0]), t(l[1])]; });
       var nom = t(p.nom);
       sautSiBesoin(Math.min(hauteurBloc(nom, lignes) * 1.1, HAUT - BAS - MARGE - 2));
@@ -448,7 +459,10 @@
     });
 
     /* --- Mentions --- */
-    var mentions = 'Dimensionnement indicatif établi par méthode simplifiée à partir des relevés effectués sur place. ' +
+    var mentions = 'Dimensionnement indicatif. Déperditions calculées pièce par pièce selon la méthode de la NF EN 12831 et de son annexe nationale NF P52-612/CN ' +
+      '(température de base par département et altitude, sol selon l\'EN ISO 13370 simplifiée, locaux non chauffés, ventilation : infiltrations n50, ' +
+      'VMC, minimum hygiénique), avec des coefficients U et ponts thermiques issus des tables 3CL-DPE et une surpuissance de relance forfaitaire ; ' +
+      'dimensionnement établi à partir des relevés effectués sur place. ' +
       (airAir || !interne ? '' : 'Radiateurs neufs et radiateurs acier types 11, 21, 22, 33 : puissances ΔT50 du catalogue ' + D.CATALOGUE_RADIATEURS.source + ' (EN 442) ; ' +
         'autres radiateurs existants : valeurs indicatives, à recouper avec la documentation du fabricant. ') +
       'Plafonds Anah ' + D.ANAH.annee + ' : à vérifier lors du dépôt du dossier. Document établi le ' + new Date().toLocaleDateString('fr-FR') + '.';

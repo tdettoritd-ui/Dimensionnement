@@ -61,6 +61,142 @@
     return p.local.b / (r + D.R_SE_LOCAL);
   }
 
+  /* ---------- NF EN 12831 : température de base, sol, ventilation ---------- */
+
+  // Température extérieure de base d'après le département, l'altitude et la côte (annexe nationale).
+  // null si aucun département ; horsTable : altitude au-delà du tableau (dernière valeur connue).
+  function temperatureBase(climat) {
+    var dep = D.find(D.DEPARTEMENTS, climat.departement);
+    if (!dep) return null;
+    var col = D.ALTITUDE_BASE.colonnes[String(dep.t)];
+    var alt = Math.max(num(climat.altitude), 0);
+    if (climat.cote === 'oui' && alt <= 200 && col[0] !== null) return { t: col[0], horsTable: false, departement: dep };
+    var k = 0;
+    while (alt > D.ALTITUDE_BASE.bornes[k]) k++;
+    var i = k + 1;
+    var horsTable = col[i] === null;
+    while (col[i] === null && i > 1) i--;
+    return { t: col[i], horsTable: horsTable, departement: dep };
+  }
+
+  // Moyenne annuelle de la température extérieure selon la température de base.
+  function temperatureMoyenne(tBase) {
+    var t = Math.round(num(tBase));
+    for (var k = 0; k < D.TEMPERATURE_MOYENNE.length; k++) if (t >= D.TEMPERATURE_MOYENNE[k][0]) return D.TEMPERATURE_MOYENNE[k][1];
+    return 5;
+  }
+
+  // Interpolation linéaire dans une suite croissante ou décroissante (bornée aux extrémités).
+  function interpoler(axe, x) {
+    var asc = axe[axe.length - 1] > axe[0];
+    var n = axe.length;
+    if (asc ? x <= axe[0] : x >= axe[0]) return [0, 0, 0];
+    if (asc ? x >= axe[n - 1] : x <= axe[n - 1]) return [n - 1, n - 1, 0];
+    for (var k = 1; k < n; k++) {
+      if (asc ? x <= axe[k] : x >= axe[k]) return [k - 1, k, (x - axe[k - 1]) / (axe[k] - axe[k - 1])];
+    }
+    return [n - 1, n - 1, 0];
+  }
+
+  // U équivalent d'un plancher sur terre-plein (tableau EN ISO 13370) selon son U et B'.
+  function uEquivalentSol(uPlancher, bPrime) {
+    var T = D.SOL;
+    var iu = interpoler(T.u, uPlancher);
+    var ib = interpoler(T.b, bPrime);
+    var v = function (r, c) { return T.uEquiv[r][c]; };
+    var haut = v(ib[0], iu[0]) + (v(ib[0], iu[1]) - v(ib[0], iu[0])) * iu[2];
+    var bas = v(ib[1], iu[0]) + (v(ib[1], iu[1]) - v(ib[1], iu[0])) * iu[2];
+    return haut + (bas - haut) * ib[2];
+  }
+
+  // Plancher sur terre-plein d'une pièce : coefficient (W/m².K, rapporté à θint − θe) = fg1 × fg2 × Uequiv × Gw.
+  // B' de la pièce, ou du bâtiment si le plancher est bien isolé (U < 0,5) ou la pièce sans mur extérieur.
+  function solPiece(climat, surface, lineaire, tConfort, sol) {
+    var p = plancherBas(climat);
+    var uDalle = 1 / (p.dalle.r + rIsolant(climat.isolantPlancher));
+    var parBatiment = (uDalle < 0.5 || !(lineaire > 0)) && sol && sol.perimetre > 0;
+    var bPrime = parBatiment ? sol.aire / (0.5 * sol.perimetre) : (lineaire > 0 ? surface / (0.5 * lineaire) : D.SOL.b[D.SOL.b.length - 1]);
+    var ti = num(tConfort);
+    var te = num(climat.tBaseHiver);
+    var fg2 = ti > te ? Math.max((ti - temperatureMoyenne(te)) / (ti - te), 0) : 0;
+    var uEquiv = uEquivalentSol(uDalle, bPrime);
+    return { uDalle: uDalle, bPrime: bPrime, parBatiment: parBatiment, fg2: fg2, uEquiv: uEquiv, u: D.SOL.fg1 * fg2 * uEquiv * D.SOL.gw };
+  }
+
+  function surTerrePlein(climat) {
+    return plancherBas(climat).local.id === 'terre_plein';
+  }
+
+  // Pièces principales, salles d'eau et WC (débit de la VMC).
+  function compterPieces(sources) {
+    var principales = 0, sdb = 0, wc = 0;
+    sources.forEach(function (p) {
+      var nom = String(p.nom || '');
+      if (typesPiece(nom).some(function (t) { return t.id === 'sejour' || t.id === 'chambre' || t.id === 'bureau'; })) principales++;
+      if (/bain|salle d.eau|douche/i.test(nom)) sdb++;
+      if (/\bwc\b|toilette/i.test(nom)) wc++;
+    });
+    return { principales: principales, sdb: sdb, wc: wc };
+  }
+
+  // Données communes du chantier pour la ventilation et le sol : volume total, débit extrait de la VMC,
+  // aire et périmètre du plancher bas (B' du bâtiment).
+  // isolee : pièce calculée seule (sans chantier) : débit de VMC au taux forfaitaire du type de ventilation.
+  function contexteChantier(climat, sources, surfaceGlobale, isolee) {
+    var volumes = 0, aire = 0, perimetre = 0;
+    sources.forEach(function (p) {
+      var s = surfacePiece(p);
+      volumes += s * num(p.hauteur);
+      if (p.surPlancherBas !== 'non') { aire += s; perimetre += lineairePiece(p); }
+    });
+    var type = D.find(D.VENTILATIONS, climat.ventilation) || D.VENTILATIONS[0];
+    var c = compterPieces(sources);
+    // Mode global : pièces principales estimées d'après la surface (≈ 25 m² chacune).
+    var f = surfaceGlobale ? Math.round(surfaceGlobale / 25) : c.principales;
+    f = Math.min(Math.max(f || 1, 1), 6);
+    var colonne = (c.sdb >= 2 ? 2 : 0) + (c.wc >= 2 ? 1 : 0);
+    var vexTable = type.id === 'aucune' ? 0 : D.DEBITS_VMC[type.doubleFlux ? 'double' : 'simple'][f][colonne];
+    var vexSaisi = !estVide(climat.debitExtrait) && num(climat.debitExtrait) >= 0;
+    return {
+      sommeVolumes: volumes,
+      piecesPrincipales: f,
+      vex: type.id === 'aucune' ? 0 : isolee ? type.taux * volumes : (vexSaisi ? num(climat.debitExtrait) : vexTable),
+      vexAuto: !vexSaisi,
+      vexTable: vexTable,
+      sol: { aire: aire, perimetre: perimetre }
+    };
+  }
+
+  // Débits d'air d'une pièce (m³/h) selon la NF EN 12831 :
+  // infiltrations Vinf = 2 × V × n50 × e × ε (ε = 1, maison < 10 m) ; minimum hygiénique Vmin = Nmin × V ;
+  // VMC : débit extrait réparti au prorata du volume ; double flux : air soufflé compté × (1 − rendement).
+  // debit : débit pour les déperditions d'hiver ; debitEte : renouvellement d'été (sans infiltrations).
+  function ventilationPiece(piece, climat, ctx) {
+    var type = D.find(D.VENTILATIONS, climat.ventilation) || D.VENTILATIONS[0];
+    var volume = surfacePiece(piece) * num(piece.hauteur);
+    var etancheite = D.find(D.ETANCHEITES, climat.etancheite) || D.find(D.ETANCHEITES, 'moyenne');
+    var n50 = num(climat.n50) > 0 ? num(climat.n50) : etancheite.n50;
+    var facades = piece.facades !== undefined ? num(piece.facades)
+      : !estVide(piece.mursExposes) ? num(piece.mursExposes) : (lineairePiece(piece) > 0 ? 1 : 0);
+    var expo = D.find(D.EXPOSITIONS, climat.exposition) || D.find(D.EXPOSITIONS, 'modere');
+    var e = expo.e[Math.min(Math.max(Math.round(facades), 0), 2)];
+    var vinf = 2 * volume * n50 * e;
+    var nmin = D.MOTIF_PIECE_HUMIDE.test(String(piece.nom || '')) ? D.NMIN.humide : D.NMIN.defaut;
+    var vmin = nmin * volume;
+    var vmechAuto = type.id === 'aucune' || !(ctx.sommeVolumes > 0) ? 0 : ctx.vex * volume / ctx.sommeVolumes;
+    var vmech = estVide(piece.debit) ? vmechAuto : Math.max(num(piece.debit), 0);
+    var rendement = type.doubleFlux ? Math.min(Math.max(estVide(climat.rendementDF) ? 80 : num(climat.rendementDF), 0), 95) / 100 : 0;
+    var fv = 1 - rendement;
+    // Air renouvelé au moins égal au minimum hygiénique ; le complément entre à la température extérieure.
+    var complement = Math.max(vmin - (vinf + vmech), 0);
+    return {
+      volume: volume, n50: n50, e: e, nmin: nmin,
+      vinf: vinf, vmin: vmin, vmech: vmech, vmechAuto: vmechAuto, fv: fv, complement: complement,
+      debit: vinf + vmech * fv + complement,
+      debitEte: Math.max(vmech, vmin)
+    };
+  }
+
   // Épaisseur du mur retenue (cm) : la saisie, sinon l'épaisseur courante du type de paroi.
   function epaisseurMur(climat) {
     var mur = D.find(D.MURS, climat.murType);
@@ -263,17 +399,6 @@
     }];
   }
 
-  function debitEstime(piece, climat) {
-    var v = D.find(D.VENTILATIONS, climat.ventilation);
-    var volume = surfacePiece(piece) * num(piece.hauteur);
-    return v ? volume * v.taux : 0;
-  }
-
-  // Débit retenu : la saisie si renseignée, sinon l'estimation volume × taux.
-  function debitRetenu(piece, climat) {
-    return estVide(piece.debit) ? debitEstime(piece, climat) : Math.max(num(piece.debit), 0);
-  }
-
   // Plus petit palier ≥ valeur ; null si valeur nulle ; depasse si au-delà du dernier palier.
   function palier(valeur, paliers) {
     if (!(valeur > 0)) return { valeur: null, depasse: false };
@@ -387,7 +512,8 @@
       // Sol : plancher bas lourd, sinon plancher d'étage (moitié comptée de chaque côté).
       // Sur cave chauffée, le plancher bas se comporte comme un plancher d'étage.
       if (piece.surPlancherBas !== 'non' && b > 0) {
-        if (!mur.bois && !plancher.dalle.leger) {
+        // Terre-plein : méthode simplifiée de la NF EN 12831, ponts thermiques du sol non comptés.
+        if (!mur.bois && !plancher.dalle.leger && plancher.local.id !== 'terre_plein') {
           l.plancherBas = L;
           d.plancherBas = T.plancherBas[iso][rIsolant(climat.isolantPlancher) > 0 ? 1 : 0] * L * b;
         }
@@ -532,6 +658,7 @@
         activite: 'sedentaire',
         equipements: estVide(g.equipements) ? '' : String(Math.max(num(g.equipements), 0) / n),
         debit: '',
+        facades: 2, // niveau entier : façades sur plusieurs côtés
         longueurRefend: D.PONTS_THERMIQUES.refendParM2 * emprise * hauteur,
         radiateurs: []
       });
@@ -659,7 +786,9 @@
   }
 
   // hauteurRadiateur (facultatif) : hauteur souhaitée des radiateurs neufs (mm), vide = toutes.
-  function calculPiece(piece, climat, regimeEau, foyer, hauteurRadiateur) {
+  // ctx (facultatif) : données communes du chantier (contexteChantier) ; sinon, la pièce seule.
+  function calculPiece(piece, climat, regimeEau, foyer, hauteurRadiateur, ctx) {
+    ctx = ctx || contexteChantier(climat, [piece], 0, true);
     // Isolation des murs : celle du chantier, ou propre à la pièce (un ou plusieurs murs).
     var segments = segmentsMurs(piece, climat);
     segments.forEach(function (sg) { sg.uMur = uEnveloppe(sg.climat).mur; });
@@ -671,7 +800,15 @@
     var sousToiture = piece.sousToiture !== 'non';
     var uToiture = sousToiture ? u.toiture : 0;
     var surPlancherBas = piece.surPlancherBas !== 'non';
-    var uPlancher = surPlancherBas ? u.plancher : 0;
+    // Confort hiver de la pièce : sa saisie, sinon celle du chantier.
+    var confortAuto = estVide(piece.tConfortHiver);
+    var tConfort = confortAuto ? climat.tConfortHiver : piece.tConfortHiver;
+    var sol = null;
+    var uPlancher = 0;
+    if (surPlancherBas) {
+      sol = surTerrePlein(climat) ? solPiece(climat, surfacePiece(piece), lineairePiece(piece), tConfort, ctx.sol) : null;
+      uPlancher = sol ? sol.u : u.plancher;
+    }
 
     var surfaceVitree = 0;
     var surfaceFenetresToit = 0;
@@ -687,8 +824,18 @@
     var lineaire = lineairePiece(piece);
     var smur = Math.max(lineaire * num(piece.hauteur) - (surfaceVitree - surfaceFenetresToit), 0);
     var surfaceToiture = Math.max(s - surfaceFenetresToit, 0);
-    var debit = debitRetenu(piece, climat);
+    var vent = ventilationPiece(piece, climat, ctx);
+    var debit = vent.debit;
     var pt = pontsThermiquesMurs(piece, segments);
+    // Murs sur local non chauffé (garage, cellier, comble…) : U du mur × surface × bu.
+    var lnc = 0;
+    var detailLnc = (piece.paroisLnc || []).map(function (pl) {
+      var local = D.find(D.LOCAUX_NON_CHAUFFES, pl.local) || D.LOCAUX_NON_CHAUFFES[0];
+      var surface = Math.max(num(pl.longueur), 0) * num(piece.hauteur);
+      var h = u.mur * surface * local.b;
+      lnc += h;
+      return { local: local, surface: surface, h: h };
+    });
 
     var deperditions = {
       murs: u.mur * smur,
@@ -696,13 +843,11 @@
       plancher: uPlancher * s,
       vitrages: deperditionsVitrages,
       pontsThermiques: pt.total,
+      localNonChauffe: lnc,
       air: COEF_AIR * debit
     };
     var G = deperditions.murs + deperditions.toiture + deperditions.plancher +
-      deperditions.vitrages + deperditions.pontsThermiques + deperditions.air;
-    // Confort hiver de la pièce : sa saisie, sinon celle du chantier.
-    var confortAuto = estVide(piece.tConfortHiver);
-    var tConfort = confortAuto ? climat.tConfortHiver : piece.tConfortHiver;
+      deperditions.vitrages + deperditions.pontsThermiques + deperditions.localNonChauffe + deperditions.air;
     var deltaHiver = num(tConfort) - num(climat.tBaseHiver);
     var chauffageBase = Math.max(G * deltaHiver, 0);
     // Surpuissance de relance (% de la puissance de base), après abaissement de nuit ou absence.
@@ -711,7 +856,7 @@
 
     var clim = climatisationPiece(piece, climat, foyer || D.CLIM.foyerDefaut, {
       u: { mur: u.mur, toiture: uToiture }, smur: smur, surface: s, surfaceToiture: surfaceToiture,
-      debit: debit, pontsThermiques: pt, segments: segments
+      debit: vent.debitEte, pontsThermiques: pt, segments: segments
     });
 
     // Radiateurs : puissances catalogue (ΔT50) ramenées au régime d'eau de l'installation.
@@ -749,7 +894,10 @@
       u: { mur: u.mur, toiture: uToiture, plancher: uPlancher },
       debit: debit,
       debitAuto: estVide(piece.debit),
-      debitEstime: debitEstime(piece, climat),
+      debitEstime: vent.vmechAuto,
+      ventilation: vent,
+      sol: sol,
+      paroisLnc: detailLnc,
       deperditions: deperditions,
       pontsThermiques: pt,
       G: G,
@@ -852,7 +1000,8 @@
     var sources = global ? piecesGlobales(chantier.global, foyer.n) : (chantier.pieces || []);
     if (airAir) sources = sources.map(function (p) { return Object.assign({}, p, { radiateur: null, radiateurs: [] }); });
     var hauteurRadiateur = chantier.installation ? chantier.installation.hauteurRadiateur : '';
-    var pieces = sources.map(function (p) { return calculPiece(p, chantier.climat, regimeEau, foyer.n, hauteurRadiateur); });
+    var ctx = contexteChantier(chantier.climat || {}, sources, global ? Math.max(num((chantier.global || {}).surface), 0) : 0);
+    var pieces = sources.map(function (p) { return calculPiece(p, chantier.climat, regimeEau, foyer.n, hauteurRadiateur, ctx); });
     var chauffage = 0;
     var deperditionsTotales = 0;
     var volume = 0;
@@ -877,6 +1026,7 @@
     });
     return {
       mode: global ? 'global' : 'pieces',
+      ventilation: ctx,
       systeme: airAir ? 'air_air' : 'air_eau',
       sources: sources,
       pieces: pieces,
@@ -931,6 +1081,11 @@
     rIsolant: rIsolant,
     uParoi: uParoi,
     uEnveloppe: uEnveloppe,
+    temperatureBase: temperatureBase,
+    temperatureMoyenne: temperatureMoyenne,
+    uEquivalentSol: uEquivalentSol,
+    contexteChantier: contexteChantier,
+    ventilationPiece: ventilationPiece,
     personnesFoyer: personnesFoyer,
     segmentsMurs: segmentsMurs,
     mursIsolationPiece: mursIsolationPiece,
@@ -941,7 +1096,6 @@
     contreCloison: contreCloison,
     plancherBas: plancherBas,
     uVitrage: uVitrage,
-    debitEstime: debitEstime,
     palier: palier,
     radiateurExistant: radiateurExistant,
     radiateurNeuf: radiateurNeuf,

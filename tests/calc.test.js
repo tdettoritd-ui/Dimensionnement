@@ -26,6 +26,11 @@ const climat = {
 const uMur = 1 / (R(D.MURS, 'parpaing') + 0.10 / lambda('laine_verre'));
 const uToit = 1 / (R(D.TOITURES, 'combles') + 0.20 / lambda('laine_roche'));
 const uPlancher = 1 / (R(D.PLANCHERS_DALLE, 'beton') + D.find(D.PLANCHERS_LOCAL, 'terre_plein').rSol);
+// Sol sur terre-plein (NF EN 12831) : fg1 × fg2 × Uequiv, dalle béton non isolée (U 4 → colonne U 3),
+// 20 °C intérieur, -15 °C de base (moyenne annuelle 8 °C).
+const solU = (bPrime) => D.SOL.fg1 * (20 - 8) / 35 * C.uEquivalentSol(1 / R(D.PLANCHERS_DALLE, 'beton'), bPrime);
+// Infiltrations : 2 × V × n50 (étanchéité moyenne : 7) × e (site moyennement abrité).
+const vinf = (V, facades) => 2 * V * 7 * D.find(D.EXPOSITIONS, 'modere').e[Math.min(facades, 2)];
 
 test('num accepte virgule, espaces et vide', () => {
   assert.equal(C.num('2,5'), 2.5);
@@ -71,31 +76,34 @@ test('calcul pièce complet', () => {
   };
   const r = C.calculPiece(piece, climat);
   const smur = 9 * 2.5 - 2;
-  const debit = 50 * taux('vmc_auto');
+  // Pièce seule : VMC au taux forfaitaire ; + infiltrations (1 façade exposée).
+  const vmc = 50 * taux('vmc_auto');
+  const debit = vmc + vinf(50, 1);
   proche(r.smur, smur);
   proche(r.debit, debit);
   assert.equal(r.debitAuto, true);
-  // Ponts thermiques (ITI par défaut, dalle non isolée, combles bois) : plancher bas + refend + menuiserie.
+  // Ponts thermiques (ITI par défaut, combles bois) : refend + menuiserie ; sol sur terre-plein : non comptés.
   const PT = D.PONTS_THERMIQUES;
-  const pt = PT.plancherBas.iti[0] * 9 + PT.refend.iti * PT.refendParPiece * 2.5 + PT.menuiserie.iti * 4 * Math.sqrt(2);
+  const pt = PT.refend.iti * PT.refendParPiece * 2.5 + PT.menuiserie.iti * 4 * Math.sqrt(2);
   proche(r.pontsThermiques.total, pt);
-  const G = uMur * smur + uToit * 20 + uPlancher * 20 + (vit('double').u - 0.2) * 2 + pt + 0.34 * debit;
+  const G = uMur * smur + uToit * 20 + solU(20 / (0.5 * 9)) * 20 + (vit('double').u - 0.2) * 2 + pt + 0.34 * debit;
   proche(r.G, G);
   proche(r.chauffage, G * 35);
   // Été (pointe de la pièce) : soleil, conduction des baies, murs et toiture au soleil (ETD),
   // ponts thermiques hors plancher bas, air, occupants, équipements ; latent ; puissance nominale.
-  const ptEte = pt - PT.plancherBas.iti[0] * 9;
+  const ptEte = pt;
   const a = r.apports;
   proche(a.solaires, 2 * vit('double').g * D.find(D.ORIENTATIONS, 'S').wPiece);
   proche(a.vitrages, vit('double').u * 2 * 6);
   proche(a.murs, uMur * smur * D.ETD_MURS.moyen_iti);
   proche(a.toiture, uToit * 20 * D.find(D.TOITURES, 'combles').etd);
   proche(a.pontsThermiques, ptEte * 6);
-  proche(a.ventilation, 0.34 * debit * 6);
+  // Été : renouvellement d'air sans infiltrations (VMC, au moins le minimum hygiénique).
+  proche(a.ventilation, 0.34 * vmc * 6);
   proche(a.occupants, 2 * 70);
   proche(a.equipements, 150);
   proche(a.latentOccupants, 2 * 45);
-  proche(a.latentAir, 0.83 * debit * 2);
+  proche(a.latentAir, 0.83 * vmc * 2);
   const sensible = a.solaires + a.vitrages + a.murs + a.toiture + a.pontsThermiques + a.ventilation + a.occupants + a.equipements;
   const latent = a.latentOccupants + a.latentAir;
   proche(r.clim.sensible, sensible);
@@ -103,11 +111,14 @@ test('calcul pièce complet', () => {
 });
 
 test('pièce hors toiture : U toiture = 0 ; débit saisi prioritaire', () => {
-  const piece = { longueur: '4', largeur: '3', hauteur: '2.5', lineaire: '0', sousToiture: 'non', vitrages: [], debit: '10' };
+  const piece = { longueur: '4', largeur: '3', hauteur: '2.5', lineaire: '0', sousToiture: 'non', vitrages: [], debit: '20' };
   const r = C.calculPiece(piece, climat);
   assert.equal(r.deperditions.toiture, 0);
-  proche(r.debit, 10);
-  proche(r.G, uPlancher * 12 + 3.4);
+  // Débit VMC saisi + infiltrations (pièce sans façade exposée).
+  proche(r.ventilation.vmech, 20);
+  proche(r.debit, 20 + vinf(30, 0));
+  // Sans mur extérieur ni plancher bas connu du bâtiment : B' plafonné à 20.
+  proche(r.G, solU(20) * 12 + 0.34 * r.debit);
 });
 
 test('radiateurs existants', () => {
@@ -122,18 +133,21 @@ test('radiateurs existants', () => {
 });
 
 test('badge suffisant à 95 %', () => {
-  // Pièce sans mur extérieur ni vitrage : seule la ventilation déperd. 10 m³/h × 0,34 × 35 K = 119 W.
+  // Pièce sans mur extérieur ni vitrage : seule la ventilation déperd. Débit VMC 10 m³/h + infiltrations
+  // sous le minimum hygiénique (0,5 vol/h = 15 m³/h) : 15 m³/h × 0,34 × 35 K = 178,5 W.
   const piece = { longueur: '4', largeur: '3', hauteur: '2.5', lineaire: '0', sousToiture: 'non', vitrages: [], debit: '10',
     radiateur: { materiau: 'fonte', hauteurElement: '600', elements: '1' } };
   const climatSansPlancher = { ...climat, plancherType: 'aucun' };
   const r = C.calculPiece(piece, climatSansPlancher);
-  proche(r.chauffage, 119);
+  proche(r.debit, 15);
+  const besoin = 0.34 * 15 * 35;
+  proche(r.chauffage, besoin);
   const parElement = D.RADIATEURS_ELEMENTS.fonte[600];
-  const n = Math.ceil(0.95 * 119 / parElement); // nombre d'éléments juste suffisant
+  const n = Math.ceil(0.95 * besoin / parElement); // nombre d'éléments juste suffisant
   piece.radiateur.elements = String(n - 1);
   const insuffisant = C.calculPiece(piece, climatSansPlancher).radiateurExistant;
   assert.equal(insuffisant.suffisant, false);
-  proche(insuffisant.manque, 119 - (n - 1) * parElement);
+  proche(insuffisant.manque, besoin - (n - 1) * parElement);
   piece.radiateur.elements = String(n);
   assert.equal(C.calculPiece(piece, climatSansPlancher).radiateurExistant.suffisant, true);
 });
@@ -153,7 +167,8 @@ test('catégories Anah', () => {
 test('totaux chantier et préconisation PAC', () => {
   const piece = { longueur: '4', largeur: '3', hauteur: '2.5', lineaire: '0', sousToiture: 'non', vitrages: [], debit: '0' };
   const r = C.calculChantier({ climat, prime: {}, pieces: [piece, { ...piece }] });
-  const attendu = 2 * uPlancher * 12 * 35;
+  // Débit VMC nul saisi : minimum hygiénique 0,5 vol/h (15 m³/h) par pièce.
+  const attendu = 2 * (solU(20) * 12 + 0.34 * 15) * 35;
   proche(r.chauffage, attendu);
   assert.equal(r.palierChauffage.valeur, D.PALIERS_PAC.find(p => p >= attendu / 1000));
   assert.equal(r.anah, null);
@@ -204,7 +219,7 @@ test('cohérence des tables de référence', () => {
 
 test('pièce à l\'étage : pas de plancher bas', () => {
   const piece = { longueur: '4', largeur: '3', hauteur: '2.5', lineaire: '0', sousToiture: 'non', vitrages: [], debit: '0' };
-  proche(C.calculPiece(piece, climat).deperditions.plancher, uPlancher * 12);
+  proche(C.calculPiece(piece, climat).deperditions.plancher, solU(20) * 12);
   const etage = C.calculPiece({ ...piece, surPlancherBas: 'non' }, climat);
   assert.equal(etage.deperditions.plancher, 0);
   assert.equal(etage.u.plancher, 0);
@@ -221,16 +236,16 @@ test('régime d\'eau : correction des puissances de radiateurs', () => {
 
   const piece = { longueur: '4', largeur: '3', hauteur: '2.5', lineaire: '0', sousToiture: 'non', vitrages: [], debit: '10',
     radiateur: { materiau: 'alu', hauteurElement: '600', elements: '2' } };
-  const sansPlancher = { ...climat, plancherType: 'aucun' }; // besoin = 119 W
+  const sansPlancher = { ...climat, plancherType: 'aucun' }; // besoin = 15 m³/h × 0,34 × 35 K = 178,5 W
   const catalogue = 2 * D.RADIATEURS_ELEMENTS.alu[600];
   const ref = C.calculPiece(piece, sansPlancher);
   proche(ref.radiateurExistant.puissance, catalogue);
   const pac = C.calculPiece(piece, sansPlancher, '45/35');
   proche(pac.radiateurExistant.puissanceCatalogue, catalogue);
   proche(pac.radiateurExistant.puissance, catalogue * C.facteurRegime('45/35', '20'));
-  assert.equal(pac.radiateurExistant.suffisant, catalogue * C.facteurRegime('45/35', '20') >= 0.95 * 119);
+  assert.equal(pac.radiateurExistant.suffisant, catalogue * C.facteurRegime('45/35', '20') >= 0.95 * 178.5);
   // Radiateur neuf : palier catalogue couvrant le besoin au régime choisi.
-  const besoin50 = 119 / C.facteurRegime('45/35', '20');
+  const besoin50 = 178.5 / C.facteurRegime('45/35', '20');
   assert.equal(pac.radiateurNeuf.valeur, Math.min(...D.CATALOGUE_RADIATEURS.modeles.map(m => m.p50).filter(p => p >= besoin50)));
   // Le régime est lu dans l'installation par calculChantier.
   const r = C.calculChantier({ climat: sansPlancher, prime: {}, installation: { regimeEau: '45/35' }, pieces: [piece] });
@@ -240,10 +255,10 @@ test('régime d\'eau : correction des puissances de radiateurs', () => {
 test('surpuissance de relance : % ajouté à la puissance de chauffage', () => {
   const piece = { longueur: '4', largeur: '3', hauteur: '2.5', lineaire: '0', sousToiture: 'non', vitrages: [], debit: '10' };
   const sans = C.calculPiece(piece, { ...climat, plancherType: 'aucun' });
-  proche(sans.chauffage, 119);
+  proche(sans.chauffage, 178.5);
   const avec = C.calculPiece(piece, { ...climat, plancherType: 'aucun', surpuissance: '15' });
-  proche(avec.chauffageBase, 119);
-  proche(avec.chauffage, 119 * 1.15);
+  proche(avec.chauffageBase, 178.5);
+  proche(avec.chauffage, 178.5 * 1.15);
   assert.equal(C.calculPiece(piece, { ...climat, plancherType: 'aucun', surpuissance: '-5' }).chauffage, sans.chauffage);
 });
 
@@ -251,10 +266,15 @@ test('ponts thermiques 3CL selon la position de l\'isolant des murs', () => {
   const c = { ...climat, isolantToiture: { materiau: 'laine_verre', epaisseur: '20' } };
   const sejour = { longueur: '5', largeur: '5', hauteur: '2,5', lineaire: '10',
     vitrages: [{ orientation: 'S', type: 'double_argon', surface: '1,5', volet: 'non' }, { orientation: 'O', type: 'double_argon', surface: '2,5', volet: 'non' }] };
-  // Valeurs contre-vérifiées (plain-pied, dalle non isolée, combles bois) :
-  proche(C.pontsThermiques(sejour, c).total, 3.6125, 1e-3); // ITI
-  proche(C.pontsThermiques(sejour, { ...c, positionIsolantMur: 'exterieur' }).total, 7.787, 1e-3); // ITE
-  proche(C.pontsThermiques(sejour, { ...c, isolantMur: { materiau: 'aucun', epaisseur: '' } }).total, 8.621, 1e-3); // non isolé
+  // Valeurs contre-vérifiées (plain-pied, dalle non isolée, combles bois), plancher bas sur un local
+  // non chauffé de b = 1 ; sur terre-plein, le pont thermique du plancher bas n'est pas compté (EN 12831).
+  const PB = D.PONTS_THERMIQUES.plancherBas;
+  const surCave = { ...c, plancherDalle: 'beton', plancherLocal: 'cave_semi' };
+  const bCave = D.find(D.PLANCHERS_LOCAL, 'cave_semi').b;
+  proche(C.pontsThermiques(sejour, c).total, 3.6125 - PB.iti[0] * 10, 1e-3); // ITI
+  proche(C.pontsThermiques(sejour, { ...c, positionIsolantMur: 'exterieur' }).total, 7.787 - PB.ite[0] * 10, 1e-3); // ITE
+  proche(C.pontsThermiques(sejour, { ...c, isolantMur: { materiau: 'aucun', epaisseur: '' } }).total, 8.621 - PB.non_isole[0] * 10, 1e-3); // non isolé
+  proche(C.pontsThermiques(sejour, surCave).total, 3.6125 - PB.iti[0] * 10 * (1 - bCave), 1e-3);
   assert.equal(C.isolationMur({ ...c, murType: 'monomur', isolantMur: { materiau: 'aucun' } }), 'itr');
   assert.equal(C.isolationMur({ ...c, murType: 'monomur', positionIsolantMur: 'exterieur' }), 'ite_itr');
   // Sans mur extérieur : aucun pont thermique.
@@ -428,7 +448,7 @@ test('pièce saisie en m² : même résultat que longueur × largeur', () => {
   proche(b.chauffage, a.chauffage);
   proche(b.climatisation, a.climatisation);
   proche(b.surfaceVitree, a.surfaceVitree);
-  proche(C.debitEstime(m2, climat), C.debitEstime(lxl, climat));
+  proche(b.debit, a.debit);
   // Surface vide ou négative : pièce sans surface.
   assert.equal(C.surfacePiece({ saisieSurface: 'surface', surface: '' }), 0);
   assert.equal(C.surfacePiece({ saisieSurface: 'surface', surface: '-3' }), 0);
@@ -490,9 +510,11 @@ test('plancher bas : type de dalle et local dessous (b), relevés antérieurs re
   // Pont thermique du plancher bas réduit par b ; nul sur cave chauffée ou dalle bois.
   const piece = { longueur: '4', largeur: '4', hauteur: '2,5', lineaire: '8', sousToiture: 'non', vitrages: [] };
   const pt = (c) => C.calculPiece(piece, c).pontsThermiques.detail.plancherBas;
-  proche(pt(k('beton', 'cave_enterree')), b('cave_enterree') * pt(k('beton', 'terre_plein')));
+  proche(pt(k('beton', 'cave_enterree')) / b('cave_enterree'), pt(k('beton', 'cave_semi')) / b('cave_semi'));
+  assert.ok(pt(k('beton', 'cave_enterree')) > 0);
+  assert.equal(pt(k('beton', 'terre_plein')), 0); // sol : méthode simplifiée de la NF EN 12831
   assert.equal(pt(k('beton', 'cave_chauffee')), 0);
-  assert.equal(pt(k('bois', 'terre_plein')), 0);
+  assert.equal(pt(k('bois', 'cave_enterree')), 0);
   // Ancien choix unique (plancherType) : correspondance dalle + dessous.
   const ancien = { ...climat, plancherType: 'bois_vs' };
   proche(C.uEnveloppe(ancien).plancher, C.uEnveloppe(k('bois', 'vide_sanitaire')).plancher);
@@ -508,14 +530,15 @@ test('murs exposés : linéaire calculé d\'après le nombre de murs, saisie pri
   assert.equal(C.lineairePiece({ ...p, mursExposes: '', lineaire: '' }), 0);
   // Même résultat qu'avec le linéaire saisi à la main.
   const auto = C.calculPiece({ ...p, mursExposes: '3', lineaire: '' }, climat);
-  const main = C.calculPiece({ ...p, lineaire: '13' }, climat);
+  const main = C.calculPiece({ ...p, lineaire: '13', mursExposes: '3' }, climat);
   proche(auto.G, main.G);
   assert.equal(auto.lineaireAuto, true);
   assert.equal(main.lineaireAuto, false);
 });
 
 test('confort hiver propre à une pièce : vide = celui du chantier', () => {
-  const p = { longueur: '4', largeur: '4', hauteur: '2,5', lineaire: '8', sousToiture: 'non', vitrages: [],
+  // À l'étage : déperditions proportionnelles à l'écart de température (le sol ne l'est pas, fg2).
+  const p = { longueur: '4', largeur: '4', hauteur: '2,5', lineaire: '8', sousToiture: 'non', surPlancherBas: 'non', vitrages: [], debit: '20',
     radiateurs: [{ materiau: 'fonte', hauteurElement: '600', elements: '10' }] };
   const ref = C.calculPiece(p, climat, '45/35');
   const meme = C.calculPiece({ ...p, tConfortHiver: '' }, climat, '45/35');
@@ -666,7 +689,7 @@ test('personnes au foyer improbables (RFR saisi à la place) : ignorées', () =>
 });
 
 test('plusieurs unités extérieures : bilan par unité', () => {
-  const P = (nom, or, unite) => ({ nom, longueur: '4', largeur: '4', hauteur: '2,5', lineaire: '8', sousToiture: 'non', occupants: '', equipements: '', debit: '',
+  const P = (nom, or, unite) => ({ nom, longueur: '4', largeur: '4', hauteur: '2,5', lineaire: '8', sousToiture: 'non', occupants: '', equipements: '', debit: '20',
     vitrages: [{ orientation: or, type: 'double', surface: '3', volet: 'non' }], unite });
   const pieces = [P('Séjour', 'S', 'a'), P('Chambre 1', 'E', 'b'), P('Chambre 2', 'O', 'b'), P('Bureau', 'N', 'inconnue')];
   const unites = [{ uid: 'a', nom: 'UE garage' }, { uid: 'b', nom: 'UE étage' }];
@@ -698,4 +721,90 @@ test('contre-cloison agglo : épaisseur, lame d\'air ou isolant', () => {
   // Isolant derrière la contre-cloison : ponts thermiques en ITI ; lame d'air : mur non isolé.
   assert.equal(C.isolationMur(k({ entre: 'isolant', isolant: { materiau: 'laine_verre', epaisseur: '4' } })), 'iti');
   assert.equal(C.isolationMur(k({ entre: 'air' })), 'non_isole');
+});
+
+test('NF EN 12831 : température de base par département, altitude et côte', () => {
+  const tb = (departement, altitude, cote) => C.temperatureBase({ departement, altitude, cote });
+  assert.equal(C.temperatureBase({}), null);
+  assert.equal(D.DEPARTEMENTS.length, 95);
+  assert.equal(tb('57', '').t, -15);           // Moselle, plaine
+  assert.equal(tb('57', '450').t, -16);        // 401-500 m
+  assert.equal(tb('88', '1000').t, -21);       // Vosges, 901-1000 m
+  assert.equal(tb('06', '50', 'oui').t, -4);   // Alpes-Maritimes, côte (< 25 km)
+  assert.equal(tb('06', '50', 'non').t, -5);
+  assert.equal(tb('05', '1500').t, -22);       // Hautes-Alpes (-10), 1401-1500 m
+  assert.equal(tb('20', '0', 'oui').t, -2);    // Corse
+  const hors = tb('14', '800');                // Calvados (-7) : tableau limité à 500 m
+  assert.equal(hors.horsTable, true);
+  assert.equal(hors.t, -9);
+  // Moyenne annuelle (sol) : -15 °C → 8 °C ; -7 → 11 ; -2 → 13.
+  assert.deepEqual([-15, -7, -2, -30].map(C.temperatureMoyenne), [8, 11, 13, 5]);
+});
+
+test('NF EN 12831 : plancher sur terre-plein (U équivalent, B\', fg1, fg2)', () => {
+  // Points du tableau.
+  proche(C.uEquivalentSol(3, 2), 1.3);
+  proche(C.uEquivalentSol(0.5, 10), 0.23);
+  proche(C.uEquivalentSol(0.25, 20), 0.12);
+  // Interpolation entre colonnes et lignes ; bornes.
+  proche(C.uEquivalentSol(2.5, 4), (0.88 + 0.59) / 2);
+  proche(C.uEquivalentSol(1, 7), (0.38 + 0.33) / 2);
+  proche(C.uEquivalentSol(6, 1), 1.3);
+  // Exemple Thermexcel : U 0,82, B' 7,5, 20 / 12 / -7 °C → fg1 × fg2 = 0,4296 (fg1 1,45).
+  proche(D.SOL.fg1 * (20 - 12) / 27, 0.4296, 1e-3);
+  // Pièce : B' de la pièce (surface / ½ linéaire) si dalle non isolée ; du bâtiment si dalle isolée.
+  const k = { ...climat, plancherDalle: 'beton', plancherLocal: 'terre_plein' };
+  const p = { longueur: '5', largeur: '4', hauteur: '2,5', lineaire: '9', sousToiture: 'non', vitrages: [] };
+  const r = C.calculPiece(p, k);
+  proche(r.sol.bPrime, 20 / 4.5);
+  proche(r.u.plancher, D.SOL.fg1 * 12 / 35 * C.uEquivalentSol(4, 20 / 4.5));
+  const iso = { ...k, isolantPlancher: { materiau: 'pse', epaisseur: '10' } };
+  const ch = C.calculChantier({ climat: iso, prime: {}, pieces: [p, { ...p, lineaire: '4' }] });
+  assert.equal(ch.pieces[0].sol.parBatiment, true);
+  proche(ch.pieces[0].sol.bPrime, 40 / (0.5 * 13));
+  // Plus chaud dedans : fg2 plus grand.
+  assert.ok(C.calculPiece({ ...p, tConfortHiver: '24' }, k).sol.fg2 > r.sol.fg2);
+});
+
+test('NF EN 12831 : ventilation (infiltrations, minimum hygiénique, VMC, double flux)', () => {
+  const V = 50; // 5 × 4 × 2,5
+  const p = { nom: 'Séjour', longueur: '5', largeur: '4', hauteur: '2,5', mursExposes: '2', vitrages: [] };
+  const ctx = { sommeVolumes: 200, vex: 120 };
+  const e = (expo, f) => D.find(D.EXPOSITIONS, expo).e[f];
+  // Sans VMC : max(infiltrations, 0,5 vol/h).
+  const nat = C.ventilationPiece(p, { ventilation: 'aucune' }, ctx);
+  proche(nat.vinf, 2 * V * 7 * e('modere', 2));
+  proche(nat.debit, Math.max(nat.vinf, 0.5 * V));
+  // Classe d'étanchéité, n50 mesuré, exposition.
+  proche(C.ventilationPiece(p, { ventilation: 'aucune', etancheite: 'faible' }, ctx).vinf, 2 * V * 12 * e('modere', 2));
+  proche(C.ventilationPiece(p, { ventilation: 'aucune', n50: '2,5', exposition: 'non_abrite' }, ctx).vinf, 2 * V * 2.5 * e('non_abrite', 2));
+  // VMC simple flux : débit extrait au prorata du volume, ajouté aux infiltrations.
+  const sf = C.ventilationPiece(p, { ventilation: 'vmc_auto' }, ctx);
+  proche(sf.vmech, 120 * 50 / 200);
+  proche(sf.debit, sf.vinf + 30);
+  proche(sf.debitEte, 30);
+  // Double flux 80 % : air soufflé compté à 20 %, minimum hygiénique respecté.
+  const df = C.ventilationPiece(p, { ventilation: 'double_flux', rendementDF: '80' }, ctx);
+  proche(df.debit, df.vinf + 30 * 0.2);
+  assert.ok(df.debit < sf.debit);
+  // Pièce humide : 1,5 vol/h minimum.
+  const sdb = C.ventilationPiece({ ...p, nom: 'Salle de bain', mursExposes: '0' }, { ventilation: 'aucune' }, ctx);
+  proche(sdb.debit, 1.5 * V);
+  // Débit extrait de la VMC selon le logement (arrêté de 1982) : F4, 1 SdB + 1 WC → 111 m³/h ; 2 SdB → 126.
+  const P = (nom) => ({ nom, longueur: '4', largeur: '4', hauteur: '2,5' });
+  const logement = ['Séjour', 'Chambre 1', 'Chambre 2', 'Chambre 3', 'Cuisine', 'Salle de bain', 'WC'].map(P);
+  assert.equal(C.contexteChantier({ ventilation: 'vmc_auto' }, logement).vex, 111);
+  assert.equal(C.contexteChantier({ ventilation: 'vmc_auto' }, logement.concat([P('Salle d\'eau')])).vex, 126);
+  assert.equal(C.contexteChantier({ ventilation: 'double_flux' }, logement.concat([P('Salle d\'eau')])).vex, 141);
+  assert.equal(C.contexteChantier({ ventilation: 'vmc_auto', debitExtrait: '150' }, logement).vex, 150);
+  assert.equal(C.contexteChantier({ ventilation: 'aucune' }, logement).vex, 0);
+});
+
+test('NF EN 12831 : murs sur local non chauffé (bu)', () => {
+  const p = { longueur: '4', largeur: '4', hauteur: '2,5', lineaire: '8', sousToiture: 'non', vitrages: [], debit: '20' };
+  const sans = C.calculPiece(p, climat);
+  const avec = C.calculPiece({ ...p, paroisLnc: [{ longueur: '4', local: 'garage' }, { longueur: '2', local: 'logement' }] }, climat);
+  proche(avec.deperditions.localNonChauffe, uMur * 4 * 2.5 * 0.6);
+  proche(avec.G - sans.G, uMur * 4 * 2.5 * 0.6);
+  assert.deepEqual(D.LOCAUX_NON_CHAUFFES.map(l => l.b).filter(b => b < 0 || b > 1), []);
 });

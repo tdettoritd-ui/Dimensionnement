@@ -51,6 +51,9 @@
   function climatDefaut() {
     return {
       zone: 'lorraine',
+      departement: '57',
+      altitude: '',
+      cote: 'non',
       tBaseHiver: '-15',
       tBaseEte: '32',
       tConfortEte: '26',
@@ -68,6 +71,11 @@
       isolantPlancher: { materiau: 'aucun', epaisseur: '' },
       isolantToiture: { materiau: 'aucun', epaisseur: '' },
       ventilation: 'vmc_auto',
+      etancheite: 'moyenne',
+      n50: '',
+      exposition: 'modere',
+      debitExtrait: '',
+      rendementDF: '',
       positionIsolantMur: 'interieur',
       plancherEtage: 'lourd'
     };
@@ -85,6 +93,7 @@
       tConfortHiver: '',
       isolationMurs: 'chantier',
       mursIsolation: [],
+      paroisLnc: [], // murs sur local non chauffé : { uid, longueur, local }
       mursExposes: '',
       lineaire: '',
       sousToiture: 'oui',
@@ -161,6 +170,8 @@
     ['client', 'installation', 'prime'].forEach(function (k) { out[k] = Object.assign({}, base[k], c[k]); });
     if (D.REGIMES_EAU_ANCIENS[out.installation.regimeEau]) out.installation.regimeEau = D.REGIMES_EAU_ANCIENS[out.installation.regimeEau];
     out.climat = Object.assign(climatDefaut(), c.climat);
+    // Relevés antérieurs sans département : on garde leur température de base saisie.
+    if (c.climat && c.climat.departement === undefined) out.climat.departement = '';
     // Relevés antérieurs : ancien choix unique du plancher bas.
     var ancien = c.climat && D.PLANCHERS_ANCIENS[c.climat.plancherType];
     if (ancien && !c.climat.plancherDalle) { out.climat.plancherDalle = ancien[0]; out.climat.plancherLocal = ancien[1]; }
@@ -341,14 +352,34 @@
           : champ('Épaisseur de la lame d\'air', 'climat.agglo.lame', { kind: 'num', unite: 'cm', placeholder: 'auto : 3' }));
   }
 
+  function libelleClimat() {
+    var c = state.climat;
+    var dep = D.find(D.DEPARTEMENTS, c.departement);
+    var zone = D.find(D.ZONES, c.zone);
+    var lieu = dep ? dep.label.replace(/^\S+ /, '') + (C.num(c.altitude) > 0 ? ', ' + nf(C.num(c.altitude)) + ' m' : '')
+      : (zone ? zone.label.split(' – ')[0] : '');
+    return (lieu ? lieu + ' · ' : '') + c.tBaseHiver + ' °C';
+  }
+
+  // Département, altitude ou côte modifiés : température de base de l'annexe nationale.
+  function majTemperatureBase() {
+    var tb = C.temperatureBase(state.climat);
+    if (!tb) return;
+    state.climat.tBaseHiver = String(tb.t);
+    var champT = document.querySelector('[data-bind="climat.tBaseHiver"]');
+    if (champT) champT.value = state.climat.tBaseHiver;
+  }
+
   function renderClimat() {
     var c = state.climat;
-    var zone = D.find(D.ZONES, c.zone);
-    return encart('climat', 'Climat / enveloppe', esc(zone ? zone.label.split(' – ')[0] + ' · ' + c.tBaseHiver + ' °C' : ''),
+    return encart('climat', 'Climat / enveloppe', esc(libelleClimat()),
       '<div class="grid">' +
-      liste('Zone climatique hiver', 'climat.zone', D.ZONES.map(function (z) {
-        return { value: z.id, label: z.label + ' (' + (z.t > 0 ? '+' : '') + z.t + ' °C)' };
-      }), { cls: 'span-2' }) +
+      liste('Département', 'climat.departement', D.DEPARTEMENTS.map(function (d) {
+        return { value: d.id, label: d.label + ' (' + d.t + ' °C)' };
+      }), { vide: '— Choisir (sinon température saisie) —', cls: 'span-2' }) +
+      champ('Altitude', 'climat.altitude', { kind: 'int', unite: 'm', placeholder: '0 à 200' }) +
+      bascule('À moins de 25 km de la mer', 'climat.cote', OUI_NON, { obligatoire: true }) +
+      '<p class="hint span-2" id="t-base-aide"></p>' +
       champ('T° ext. de base hiver', 'climat.tBaseHiver', { kind: 'signed', unite: '°C' }) +
       champ('T° ext. de base été', 'climat.tBaseEte', { kind: 'signed', unite: '°C' }) +
       champ('Confort hiver', 'climat.tConfortHiver', { kind: 'num', unite: '°C' }) +
@@ -383,8 +414,18 @@
       (c.toitureType !== 'aucune' ? isolant('toiture', 'isolantToiture') : '') +
       '</div>' +
       '<h3 class="sub-title">Ventilation</h3><div class="grid">' +
-      liste('Type de ventilation', 'climat.ventilation', D.VENTILATIONS.map(function (v) { return { value: v.id, label: v.label + ' – ' + nf(v.taux, 2) + ' vol/h' }; }), { cls: 'span-2' }) +
+      liste('Type de ventilation', 'climat.ventilation', table2options(D.VENTILATIONS), { cls: 'span-2' }) +
+      (c.ventilation === 'double_flux' ? champ('Rendement du récupérateur', 'climat.rendementDF', { kind: 'num', unite: '%', placeholder: 'auto : 80' }) + '<div class="spacer"></div>' : '') +
+      (c.ventilation && c.ventilation !== 'aucune'
+        ? champ('Débit extrait de la VMC', 'climat.debitExtrait', { kind: 'num', unite: 'm³/h', cls: 'span-2', aide: '', aideId: 'vex-aide' })
+        : '') +
+      liste('Étanchéité à l\'air du logement', 'climat.etancheite', table2options(D.ETANCHEITES), { cls: 'span-2' }) +
+      champ('n50 mesuré (test d\'étanchéité)', 'climat.n50', { kind: 'num', unite: 'vol/h', cls: 'span-2', placeholder: 'facultatif',
+        aide: 'Saisi, il remplace la classe d\'étanchéité.' }) +
+      liste('Exposition au vent', 'climat.exposition', table2options(D.EXPOSITIONS), { cls: 'span-2' }) +
       '</div>' +
+      '<p class="hint">NF EN 12831 : infiltrations 2 × volume × n50 × e, plus le débit de la VMC (au prorata du volume des pièces), ' +
+      'au moins le minimum hygiénique (0,5 vol/h ; 1,5 en cuisine et salle de bain).</p>' +
       '<p class="hint" id="u-enveloppe"></p>');
   }
 
@@ -614,6 +655,21 @@
       '<p class="hint span-2" id="u-mur-' + p.uid + '"></p>';
   }
 
+  // Murs donnant sur un local non chauffé (garage, cellier, comble…) : coefficient bu de la NF EN 12831.
+  function renderParoisLnc(p, i) {
+    return '<div class="span-2"><span class="lbl">Murs sur local non chauffé ou logement voisin</span></div>' +
+      p.paroisLnc.map(function (pl, k) {
+        var b = 'pieces.' + i + '.paroisLnc.' + k;
+        return '<div class="vitrage span-2"><div class="vitrage-head"><span>Mur ' + (k + 1) + '</span>' +
+          '<button type="button" class="btn ghost small danger" data-action="supprimer-lnc" data-i="' + i + '" data-j="' + k + '">Supprimer</button></div>' +
+          '<div class="grid">' +
+          liste('Donne sur', b + '.local', D.LOCAUX_NON_CHAUFFES.map(function (l) { return { value: l.id, label: l.label + ' (b ' + nf(l.b, 1) + ')' }; }), { cls: 'span-2' }) +
+          champ('Longueur du mur', b + '.longueur', { kind: 'num', unite: 'ml' }) +
+          '</div></div>';
+      }).join('') +
+      '<div class="span-2"><button type="button" class="btn small" data-action="ajouter-lnc" data-i="' + i + '">+ Mur sur local non chauffé</button></div>';
+  }
+
   function renderPiece(p, i) {
     var replie = ui.replie[p.uid];
     var corps = '';
@@ -633,6 +689,7 @@
           aide: '', aideId: 'lineaire-aide-' + p.uid
         }) +
         renderIsolationMurs(p, i) +
+        renderParoisLnc(p, i) +
         (state.installation.unites.length >= 2
           ? liste('Unité extérieure', 'pieces.' + i + '.unite', state.installation.unites.map(function (u, k) { return { value: u.uid, label: nomUnite(u, k) }; }), { cls: 'span-2' })
           : '') +
@@ -647,7 +704,7 @@
         champ('Équipements', 'pieces.' + i + '.equipements', { kind: 'num', unite: 'W' }) +
         '<p class="hint span-2">Vides : valeurs automatiques selon le nom de la pièce (affichées en grisé). Saisir 0 pour n\'en compter aucun.</p>' +
         liste('Activité des occupants', 'pieces.' + i + '.activite', D.ACTIVITES.map(function (a) { return { value: a.id, label: a.label + ' (' + a.w + ' W / pers.)' }; }), { cls: 'span-2' }) +
-        champ('Débit de ventilation', 'pieces.' + i + '.debit', {
+        champ('Débit VMC de la pièce', 'pieces.' + i + '.debit', {
           kind: 'num', unite: 'm³/h',
           bouton: { action: 'estimer-debit', label: 'Estimer', data: ' data-i="' + i + '"' },
           aide: '', aideId: 'debit-aide-' + p.uid
@@ -1127,13 +1184,18 @@
       '<tr><th>Surface murs nette</th><td>' + nf(r.smur, 2) + ' m²</td></tr>' +
       '<tr><th>Surface vitrée</th><td>' + nf(r.surfaceVitree, 2) + ' m²</td></tr>' +
       '<tr><th>U mur / toiture / plancher</th><td>' + nf(r.u.mur, 2) + ' / ' + nf(r.u.toiture, 2) + ' / ' + nf(r.u.plancher, 2) + '</td></tr>' +
-      '<tr><th>Débit ventilation retenu</th><td>' + nf(r.debit, 1) + ' m³/h' + (r.debitAuto ? ' (estimé)' : '') + '</td></tr>' +
+      '<tr><th>Débit d\'air retenu (hiver)</th><td>' + nf(r.debit, 1) + ' m³/h</td></tr>' +
+      '<tr><th>dont infiltrations (n50 ' + nf(r.ventilation.n50, 1) + ', e ' + nf(r.ventilation.e, 2) + ')</th><td>' + nf(r.ventilation.vinf, 1) + ' m³/h</td></tr>' +
+      '<tr><th>dont VMC' + (r.debitAuto ? ' (auto)' : '') + (r.ventilation.fv < 1 ? ' × ' + nf(r.ventilation.fv, 2) + ' (double flux)' : '') + '</th><td>' + nf(r.ventilation.vmech * r.ventilation.fv, 1) + ' m³/h</td></tr>' +
+      (r.ventilation.complement > 0 ? '<tr><th>dont complément au minimum hygiénique</th><td>' + nf(r.ventilation.complement, 1) + ' m³/h</td></tr>' : '') +
+      (r.sol ? '<tr><th>Sol (EN ISO 13370) : B\' / U équivalent / fg2</th><td>' + nf(r.sol.bPrime, 1) + (r.sol.parBatiment ? ' (bâtiment)' : '') + ' / ' + nf(r.sol.uEquiv, 2) + ' / ' + nf(r.sol.fg2, 2) + '</td></tr>' : '') +
       '<tr class="sep"><th colspan="2">Déperditions (W/K)</th></tr>' +
       '<tr><th>Murs</th><td>' + nf(d.murs, 2) + '</td></tr>' +
       '<tr><th>Toiture</th><td>' + nf(d.toiture, 2) + '</td></tr>' +
       '<tr><th>Plancher</th><td>' + nf(d.plancher, 2) + '</td></tr>' +
       '<tr><th>Vitrages</th><td>' + nf(d.vitrages, 2) + '</td></tr>' +
       '<tr><th>Ponts thermiques (' + LIBELLES_ISOLATION[r.pontsThermiques.isolation] + ')</th><td>' + nf(d.pontsThermiques, 2) + '</td></tr>' +
+      (d.localNonChauffe ? '<tr><th>Murs sur local non chauffé (× bu)</th><td>' + nf(d.localNonChauffe, 2) + '</td></tr>' : '') +
       '<tr><th>Renouvellement d\'air</th><td>' + nf(d.air, 2) + '</td></tr>' +
       '<tr class="total"><th>G</th><td>' + nf(r.G, 2) + ' W/K</td></tr>' +
       '<tr><th>Confort hiver' + (r.tConfortAuto ? ' (chantier)' : ' (pièce)') + '</th><td>' + nf(r.tConfortHiver, 1) + ' °C</td></tr>' +
@@ -1306,7 +1368,10 @@
       if (champOcc) champOcc.placeholder = 'auto : ' + nf(r.clim.occupants);
       var champEquip = document.querySelector('[data-bind="pieces.' + i + '.equipements"]');
       if (champEquip) champEquip.placeholder = 'auto : ' + nf(Math.round(r.clim.equipements));
-      setHTML('debit-aide-' + p.uid, r.debitAuto ? 'Vide : estimation volume × taux utilisée (' + nf(r.debitEstime, 1) + ' m³/h).' : '');
+      var v = r.ventilation;
+      setHTML('debit-aide-' + p.uid, (r.debitAuto ? 'Vide : part du débit extrait de la VMC au prorata du volume (' + nf(r.debitEstime, 1) + ' m³/h). ' : '') +
+        'Débit retenu en hiver : ' + nf(r.debit, 1) + ' m³/h (infiltrations ' + nf(v.vinf, 1) + ' + VMC ' + nf(v.vmech, 1) +
+        (v.fv < 1 ? ' × ' + nf(v.fv, 2) : '') + (v.complement > 0 ? ' + complément au minimum hygiénique ' + nf(v.complement, 1) : '') + ').');
       // Alerte : sans linéaire, aucun mur extérieur n'est compté (cause fréquente de sous-évaluation).
       var aideLineaire = document.getElementById('lineaire-aide-' + p.uid);
       if (aideLineaire) {
@@ -1360,8 +1425,18 @@
       '<span>Clim · pic ' + F.esc(res.climCreneau || '') + '</span><small>' + palierBarre(res.palierClimatisation) + '</small><strong>' + kW(res.climatisation) + '</strong></div>');
 
     setHTML('sub-client', esc(state.client.nom || ''));
-    var z = D.find(D.ZONES, state.climat.zone);
-    setHTML('sub-climat', esc((z ? z.label.split(' – ')[0] : '') + ' · ' + state.climat.tBaseHiver + ' °C'));
+    setHTML('sub-climat', esc(libelleClimat()));
+    var tb = C.temperatureBase(state.climat);
+    setHTML('t-base-aide', tb
+      ? 'Température de base NF EN 12831 (annexe NF P52-612) : ' + tb.t + ' °C' + (tb.horsTable ? ' – altitude hors tableau pour ce département, à vérifier' : '') +
+        (String(tb.t) !== String(C.num(state.climat.tBaseHiver)) ? ' ; valeur saisie conservée : ' + esc(state.climat.tBaseHiver) + ' °C' : '') + '.'
+      : 'Choisir le département pour obtenir la température de base de la norme.');
+    var vent = res.ventilation;
+    setHTML('vex-aide', vent && vent.vexAuto
+      ? 'Vide : ' + nf(vent.vexTable) + ' m³/h, débit moyen de l\'arrêté du 24/03/1982 pour un F' + vent.piecesPrincipales + ' (pièces principales, salles d\'eau et WC d\'après les noms des pièces).'
+      : '');
+    var champVex = document.querySelector('[data-bind="climat.debitExtrait"]');
+    if (champVex && vent) champVex.placeholder = 'auto : ' + nf(vent.vexTable);
     document.getElementById('chantier-courant').textContent =
       (state.client.nom || 'Nouveau relevé') + (state.id ? '' : ' · non sauvegardé') + (modifie && state.id ? ' · modifié' : '');
   }
@@ -1381,6 +1456,7 @@
     var el = e.target;
     if (!el.dataset.bind || el.tagName === 'SELECT') return;
     setPath(state, el.dataset.bind, el.value);
+    if (el.dataset.bind === 'climat.altitude') majTemperatureBase();
     modification();
     rafraichir();
   });
@@ -1396,10 +1472,7 @@
     setPath(state, el.dataset.bind, el.value);
     // Autre type de paroi : l'épaisseur saisie ne vaut plus, retour à l'épaisseur courante.
     if (el.dataset.bind === 'climat.murType') state.climat.epaisseurMur = '';
-    if (el.dataset.bind === 'climat.zone') {
-      var z = D.find(D.ZONES, el.value);
-      if (z) state.climat.tBaseHiver = String(z.t);
-    }
+    if (el.dataset.bind === 'climat.departement') majTemperatureBase();
     modification();
     render();
   });
@@ -1425,6 +1498,7 @@
       var path = bt.dataset.set;
       var v = bt.dataset.value;
       setPath(state, path, getPath(state, path) === v && bt.hasAttribute('data-clear') ? '' : v);
+      if (path === 'climat.cote') majTemperatureBase();
       // Choix du nombre de murs exposés : le linéaire est recalculé (saisie manuelle effacée).
       var mm = /^pieces\.(\d+)\.mursExposes$/.exec(path);
       if (mm) state.pieces[+mm[1]].lineaire = '';
@@ -1459,6 +1533,7 @@
         copie.vitrages.forEach(function (v) { v.uid = uid(); });
         copie.radiateurs.forEach(function (r) { r.uid = uid(); });
         copie.mursIsolation.forEach(function (m) { m.uid = uid(); });
+        copie.paroisLnc.forEach(function (m) { m.uid = uid(); });
         state.pieces.splice(i + 1, 0, copie);
         modification();
         render();
@@ -1523,7 +1598,13 @@
         getPath(state, bt.dataset.base).vitrages.splice(j, 1);
         break;
       case 'estimer-debit':
-        p.debit = String(Math.round(C.debitEstime(p, state.climat) * 10) / 10).replace('.', ',');
+        p.debit = String(Math.round(C.calculChantier(state).pieces[i].debitEstime * 10) / 10).replace('.', ',');
+        break;
+      case 'ajouter-lnc':
+        p.paroisLnc.push({ uid: uid(), longueur: '', local: 'garage' });
+        break;
+      case 'supprimer-lnc':
+        p.paroisLnc.splice(j, 1);
         break;
       default:
         return;

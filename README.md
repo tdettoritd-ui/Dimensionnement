@@ -82,7 +82,16 @@ En ITI, les planchers d'étage et les refends dominent ; en ITE, ce sont le plan
 
 **Saisie rapide des vitrages** : surface vitrée = pourcentage de la surface au sol de la pièce selon le niveau (table `NIVEAUX_VITRAGE` de `js/data.js`), avec une orientation principale, un type de vitrage et la présence de volets. L'orientation « Plusieurs orientations » utilise la moyenne des rayonnements de la table.
 
-**Débit de ventilation** : le bouton « Estimer » remplit `volume × taux` du type de ventilation. Si le champ est laissé vide, cette estimation est utilisée automatiquement (affichée en grisé) pour ne pas oublier le poste renouvellement d'air.
+**NF EN 12831 (révision novembre 2026)** : déperditions pièce par pièce selon la méthode de la norme et de son annexe nationale NF P52-612/CN, d'après les tableaux de la page Thermexcel « Calcul des déperditions thermiques NF EN 12831 » :
+
+- **Température extérieure de base** : valeur du département au niveau de la mer (table `DEPARTEMENTS`), corrigée selon l'altitude et la distance à la côte (< 25 km) (table `ALTITUDE_BASE`). Au-delà du tableau d'un département, dernière valeur connue, signalée « à vérifier ». La valeur reste modifiable à la main ; les relevés antérieurs sans département gardent leur température saisie.
+- **Sol (plancher sur terre-plein)** : méthode simplifiée de l'EN ISO 13370, `H = fg1 × fg2 × Σ(A × Uequiv) × Gw`, fg1 = 1,45, Gw = 1, `fg2 = (θint − θm,e) / (θint − θe)` (θm,e selon la température de base, table `TEMPERATURE_MOYENNE`), Uequiv interpolé dans la table `SOL` selon le U du plancher et `B' = A / (0,5 × P)` : B' de la pièce, ou du bâtiment si le plancher est bien isolé (U < 0,5) ou si la pièce n'a pas de mur extérieur. Ponts thermiques du plancher bas non comptés sur terre-plein (méthode simplifiée). Cave, vide sanitaire, sous-sol : coefficient bu (inchangé, valeurs conformes à la table de la norme).
+- **Murs sur local non chauffé** (par pièce) : `U mur × surface × bu`, bu de la table `LOCAUX_NON_CHAUFFES` (garage 0,6, sous-sol 0,5 ou 0,8, comble 0,7 à 1…) ; logement voisin chauffé : 0.
+- **Ventilation** : infiltrations `Vinf = 2 × V × n50 × e × ε` (n50 selon la classe d'étanchéité : 3, 7 ou 12 vol/h, ou valeur mesurée ; e selon l'exposition du site et le nombre de façades de la pièce ; ε = 1) ; minimum hygiénique `Nmin × V` (0,5 vol/h, 1,5 en cuisine et salle de bain) ; VMC : débit extrait moyen de l'arrêté du 24/03/1982 (table `DEBITS_VMC`, selon le nombre de pièces principales, salles d'eau et WC déduit des noms des pièces, ou saisi), réparti au prorata du volume ; double flux : air soufflé compté × (1 − rendement). Débit retenu `Vinf + Vmech × fv`, complété jusqu'au minimum hygiénique. Le champ « Débit VMC de la pièce » remplace la part de VMC calculée. Été : renouvellement sans infiltrations (VMC, au moins le minimum hygiénique).
+- **Total du bâtiment** : somme des pièces (`ΦHL = ΣΦT + ΣΦV + ΣΦRH`), comme présenté par Thermexcel.
+- **Restent simplifiés** : surpuissance de relance en % (la norme donne fRH en W/m² selon l'inertie et le temps de relance ; le tableau publié par Thermexcel est celui des bâtiments non résidentiels) ; pas d'échanges entre pièces chauffées à des températures différentes ; U et ponts thermiques des tables 3CL-DPE.
+
+Effet sur une maison type de 8 pièces en Moselle (VMC autoréglable, étanchéité moyenne) : chauffage 7,72 → 8,14 kW (+5 %), plus de ventilation (infiltrations, cuisine et salle de bain), moins de pertes par le sol.
 
 ## Révision des tables (octobre 2026)
 
