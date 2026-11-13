@@ -265,10 +265,24 @@
     };
   }
 
-  function uVitrage(vitrage) {
-    var t = D.find(D.VITRAGES, vitrage.type);
-    if (!t) return 0;
-    return Math.max(t.u - (vitrage.volet === 'oui' ? REDUCTION_VOLET : 0), U_VITRAGE_MIN);
+  // Fenêtre effective : vitrage, menuiserie et volet de la baie, sinon ceux du logement (Climat).
+  // Menuiserie connue : Uw et g calculés (EN ISO 10077-1) ; sinon valeurs courantes 3CL du vitrage.
+  function fenetre(vitrage, climat) {
+    var c = climat || {};
+    var type = D.find(D.VITRAGES, vitrage.type) || D.find(D.VITRAGES, c.vitrageType) || D.find(D.VITRAGES, 'double');
+    var menuiserie = D.find(D.MENUISERIES, estVide(vitrage.menuiserie) ? c.menuiserie : vitrage.menuiserie);
+    var volet = vitrage.volet === 'oui' || vitrage.volet === 'non' ? vitrage.volet : (c.volets === 'oui' ? 'oui' : 'non');
+    var F = D.FENETRE;
+    var uw = menuiserie
+      ? F.partVitrage * type.ug + (1 - F.partVitrage) * menuiserie.uf + (type.id === 'simple' ? 0 : F.psiIntercalaire)
+      : type.u;
+    return { type: type, menuiserie: menuiserie, volet: volet, uw: uw, g: menuiserie ? F.partVitrage * type.gv : type.g };
+  }
+
+  // U de la baie en hiver (volet roulant fermé la nuit : −0,2).
+  function uVitrage(vitrage, climat) {
+    var f = fenetre(vitrage, climat);
+    return Math.max(f.uw - (f.volet === 'oui' ? REDUCTION_VOLET : 0), U_VITRAGE_MIN);
   }
 
   // Rayonnement d'été (W/m²) d'une orientation ; « mixte » = moyenne des orientations.
@@ -394,6 +408,7 @@
     return [{
       orientation: g.orientation,
       type: g.type,
+      menuiserie: g.menuiserie,
       volet: g.volet,
       surface: niveau ? surfaceSol * niveau.ratio : 0
     }];
@@ -708,14 +723,14 @@
     var vitrages = 0;
     vitragesPiece(piece).forEach(function (v) {
       var s = Math.max(num(v.surface), 0);
-      var type = D.find(D.VITRAGES, v.type);
-      if (!type || !(s > 0)) return;
+      if (!(s > 0)) return;
+      var f = fenetre(v, climat);
       var verticale = !fenetreDeToit(v);
-      solaires += s * type.g * rayonnementPiece(v.orientation) * (legere && verticale ? K.solaireLeger : 1);
-      solairesSimultanes += s * type.g * rayonnement(v.orientation);
+      solaires += s * f.g * rayonnementPiece(v.orientation) * (legere && verticale ? K.solaireLeger : 1);
+      solairesSimultanes += s * f.g * rayonnement(v.orientation);
       var facteur = legere && verticale ? K.solaireLeger : 1;
-      rayonnementCreneaux(v.orientation).forEach(function (w, j) { solairesCreneaux[j] += s * type.g * w * facteur; });
-      vitrages += Math.max(type.u, U_VITRAGE_MIN) * s * ecart;
+      rayonnementCreneaux(v.orientation).forEach(function (w, j) { solairesCreneaux[j] += s * f.g * w * facteur; });
+      vitrages += Math.max(f.uw, U_VITRAGE_MIN) * s * ecart;
     });
 
     // Murs au soleil : chaque isolation avec son écart équivalent, au prorata du linéaire.
@@ -817,7 +832,7 @@
       var surface = Math.max(num(v.surface), 0);
       surfaceVitree += surface;
       if (fenetreDeToit(v)) surfaceFenetresToit += surface;
-      deperditionsVitrages += uVitrage(v) * surface;
+      deperditionsVitrages += uVitrage(v, climat) * surface;
     });
 
     // Les baies verticales sont prises sur les murs, les fenêtres de toit sur la toiture.
@@ -1096,6 +1111,7 @@
     contreCloison: contreCloison,
     plancherBas: plancherBas,
     uVitrage: uVitrage,
+    fenetre: fenetre,
     palier: palier,
     radiateurExistant: radiateurExistant,
     radiateurNeuf: radiateurNeuf,

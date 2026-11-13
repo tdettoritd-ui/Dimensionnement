@@ -808,3 +808,33 @@ test('NF EN 12831 : murs sur local non chauffé (bu)', () => {
   proche(avec.G - sans.G, uMur * 4 * 2.5 * 0.6);
   assert.deepEqual(D.LOCAUX_NON_CHAUFFES.map(l => l.b).filter(b => b < 0 || b > 1), []);
 });
+
+test('fenêtres : vitrage × menuiserie (Uw), valeurs du logement, baie différente', () => {
+  const F = (v, c) => C.fenetre(v, c);
+  // Tableau Thermexcel (châssis PVC Uf 1,7 / métal Uf 3,5 / sans coupure Uf 6) retrouvé à ±0,1.
+  const k = (menuiserie) => ({ vitrageType: 'double', menuiserie });
+  assert.ok(Math.abs(F({}, k('pvc')).uw - 2.68) < 0.1);
+  assert.ok(Math.abs(F({ type: 'simple' }, k('alu')).uw - 5.78) < 0.1);
+  assert.ok(Math.abs(F({ type: 'double_argon' }, k('alu_rpt')).uw - 2.08) < 0.15);
+  // Menuiserie non précisée : fenêtre courante (relevés antérieurs inchangés).
+  proche(F({ type: 'double' }, {}).uw, D.find(D.VITRAGES, 'double').u);
+  proche(F({ type: 'double' }, {}).g, D.find(D.VITRAGES, 'double').g);
+  // Baie sans valeur : celles du logement ; baie différente : les siennes.
+  const logement = { vitrageType: 'double_argon', menuiserie: 'bois', volets: 'oui' };
+  const def = F({ type: '', menuiserie: '', volet: '' }, logement);
+  assert.deepEqual([def.type.id, def.menuiserie.id, def.volet], ['double_argon', 'bois', 'oui']);
+  const autre = F({ type: 'simple', menuiserie: 'alu', volet: 'non' }, logement);
+  assert.deepEqual([autre.type.id, autre.menuiserie.id, autre.volet], ['simple', 'alu', 'non']);
+  proche(C.uVitrage({}, logement), def.uw - 0.2);
+  // Ordre attendu : PVC < mixte < bois < alu à rupture < alu sans rupture ; triple < double < simple.
+  const uw = (m) => F({}, k(m)).uw;
+  assert.ok(uw('pvc') < uw('mixte') && uw('mixte') < uw('bois') && uw('bois') < uw('alu_rpt') && uw('alu_rpt') < uw('alu'));
+  const ut = (t) => F({ type: t }, k('pvc')).uw;
+  assert.ok(ut('triple') < ut('double_argon') && ut('double_argon') < ut('double_fe') && ut('double_fe') < ut('double') && ut('double') < ut('double_ancien') && ut('double_ancien') < ut('simple'));
+  // Effet sur la pièce : déperditions des baies et soleil d'été.
+  const p = { longueur: '4', largeur: '4', hauteur: '2,5', lineaire: '8', sousToiture: 'non', debit: '20',
+    vitrages: [{ orientation: 'S', type: '', menuiserie: '', surface: '2', volet: '' }] };
+  const r = C.calculPiece(p, { ...climat, ...logement });
+  proche(r.deperditions.vitrages, 2 * (def.uw - 0.2));
+  proche(r.apports.solaires, 2 * def.g * D.find(D.ORIENTATIONS, 'S').wPiece);
+});

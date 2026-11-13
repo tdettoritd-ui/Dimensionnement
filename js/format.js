@@ -86,16 +86,21 @@
   }
 
   // Une ligne par vitrage ; en saisie rapide, le niveau choisi et la surface estimée.
-  function lignesVitrages(piece, resultat) {
+  // Vitrage, menuiserie, Uw et volet effectifs d'une baie (ceux du logement si non précisés).
+  function texteFenetre(v, climat) {
+    var f = C.fenetre(v, climat);
+    return f.type.label + (f.menuiserie ? ', ' + f.menuiserie.label.toLowerCase() : '') + ' (Uw ' + nf(f.uw, 2) + ')' + (f.volet === 'oui' ? ' · volet' : '');
+  }
+
+  function lignesVitrages(piece, resultat, climat) {
     if (piece.vitrageMode === 'rapide') {
       var g = piece.vitrageRapide;
       var niveau = D.find(D.NIVEAUX_VITRAGE, g.niveau);
       return [(niveau ? niveau.label + ' (' + nf(niveau.ratio * 100) + ' % du sol)' : 'Saisie rapide') +
-        ' · ' + libelleOrientation(g.orientation) + ' · ' + libelle(D.VITRAGES, g.type) +
-        ' · ≈ ' + nf(resultat.surfaceVitree, 1) + ' m²' + (g.volet === 'oui' ? ' · volets' : '')];
+        ' · ' + libelleOrientation(g.orientation) + ' · ≈ ' + nf(resultat.surfaceVitree, 1) + ' m² · ' + texteFenetre(g, climat)];
     }
     return piece.vitrages.map(function (v) {
-      return libelleOrientation(v.orientation) + ' · ' + libelle(D.VITRAGES, v.type) + ' · ' + (v.surface || '0') + ' m²' + (v.volet === 'oui' ? ' · volet' : '');
+      return libelleOrientation(v.orientation) + ' · ' + (v.surface || '0') + ' m² · ' + texteFenetre(v, climat);
     });
   }
 
@@ -164,6 +169,7 @@
     lignesVitrages: lignesVitrages,
     texteRadiateurExistant: texteRadiateurExistant,
     texteRevetement: texteRevetement,
+    texteFenetre: texteFenetre,
     texteLocalisation: texteLocalisation
   };
 })(this);

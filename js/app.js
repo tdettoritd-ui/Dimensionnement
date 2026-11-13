@@ -70,6 +70,9 @@
       isolantMur: { materiau: 'aucun', epaisseur: '' },
       isolantPlancher: { materiau: 'aucun', epaisseur: '' },
       isolantToiture: { materiau: 'aucun', epaisseur: '' },
+      vitrageType: 'double',
+      menuiserie: 'pvc',
+      volets: 'non',
       ventilation: 'vmc_auto',
       etancheite: 'moyenne',
       n50: '',
@@ -100,7 +103,7 @@
       surPlancherBas: 'oui',
       vitrageMode: 'detail',
       vitrages: [],
-      vitrageRapide: { niveau: 'moyen', orientation: 'mixte', type: 'double', volet: 'non' },
+      vitrageRapide: { niveau: 'moyen', orientation: 'mixte', type: '', menuiserie: '', volet: '' },
       occupants: '',
       activite: 'sedentaire',
       equipements: '',
@@ -121,7 +124,8 @@
   }
 
   function nouveauVitrage() {
-    return { uid: uid(), orientation: 'S', type: 'double', surface: '', volet: 'non' };
+    // type, menuiserie, volet vides : ceux du logement (Climat > Fenêtres).
+    return { uid: uid(), orientation: 'S', type: '', menuiserie: '', surface: '', volet: '' };
   }
 
   // Mode global (volume total) : le logement saisi d'un bloc.
@@ -135,7 +139,7 @@
       surPlancherBas: 'oui',
       vitrageMode: 'rapide',
       vitrages: [],
-      vitrageRapide: { niveau: 'moyen', orientation: 'mixte', type: 'double', volet: 'non' },
+      vitrageRapide: { niveau: 'moyen', orientation: 'mixte', type: '', menuiserie: '', volet: '' },
       occupants: '',
       equipements: ''
     };
@@ -172,6 +176,8 @@
     out.climat = Object.assign(climatDefaut(), c.climat);
     // Relevés antérieurs sans département : on garde leur température de base saisie.
     if (c.climat && c.climat.departement === undefined) out.climat.departement = '';
+    // Relevés antérieurs : menuiserie non précisée (Uw courants 3CL, résultats inchangés).
+    if (c.climat && c.climat.menuiserie === undefined) out.climat.menuiserie = '';
     // Relevés antérieurs : ancien choix unique du plancher bas.
     var ancien = c.climat && D.PLANCHERS_ANCIENS[c.climat.plancherType];
     if (ancien && !c.climat.plancherDalle) { out.climat.plancherDalle = ancien[0]; out.climat.plancherLocal = ancien[1]; }
@@ -413,6 +419,7 @@
       liste('Toiture / plafond', 'climat.toitureType', D.TOITURES.map(function (m) { return { value: m.id, label: m.label + (m.r ? ' – R ' + nf(m.r, 2) : '') }; }), { cls: 'span-2' }) +
       (c.toitureType !== 'aucune' ? isolant('toiture', 'isolantToiture') : '') +
       '</div>' +
+      renderFenetresLogement() +
       '<h3 class="sub-title">Ventilation</h3><div class="grid">' +
       liste('Type de ventilation', 'climat.ventilation', table2options(D.VENTILATIONS), { cls: 'span-2' }) +
       (c.ventilation === 'double_flux' ? champ('Rendement du récupérateur', 'climat.rendementDF', { kind: 'num', unite: '%', placeholder: 'auto : 80' }) + '<div class="spacer"></div>' : '') +
@@ -512,9 +519,42 @@
       '<div class="grid">' +
       liste('Orientation', base + '.orientation', D.ORIENTATIONS.map(function (o) { return { value: o.id, label: o.label }; })) +
       champ('Surface de la baie', base + '.surface', { kind: 'num', unite: 'm²' }) +
-      liste('Type de vitrage', base + '.type', table2options(D.VITRAGES), { cls: 'span-2' }) +
-      bascule('Volet roulant', base + '.volet', OUI_NON, { obligatoire: true, cls: 'span-2' }) +
-      '</div></div>';
+      choixFenetre(base) +
+      '</div>' + texteUw(getPath(state, base)) + '</div>';
+  }
+
+  // Fenêtres du logement : valeurs par défaut de toutes les baies (modifiables baie par baie).
+  function renderFenetresLogement() {
+    var c = state.climat;
+    return '<h3 class="sub-title">Fenêtres du logement</h3><div class="grid">' +
+      liste('Type de vitrage', 'climat.vitrageType', table2options(D.VITRAGES), { cls: 'span-2' }) +
+      liste('Menuiserie', 'climat.menuiserie', table2options(D.MENUISERIES), { vide: 'Non précisée (fenêtre courante, tables 3CL)', cls: 'span-2' }) +
+      bascule('Volets roulants', 'climat.volets', OUI_NON, { obligatoire: true, cls: 'span-2' }) +
+      '</div>' + texteUw({}) +
+      '<p class="hint">Valeurs de toutes les fenêtres, sauf celles où un vitrage, une menuiserie ou un volet différent est choisi dans la pièce.</p>';
+  }
+
+  function libelleDefaut(table, id) {
+    var e = D.find(table, id);
+    return 'Comme le logement' + (e ? ' (' + e.label + ')' : '');
+  }
+
+  // Vitrage, menuiserie et volet d'une baie (ou de la saisie rapide) : vide = ceux du logement.
+  function choixFenetre(base) {
+    var c = state.climat;
+    return liste('Type de vitrage', base + '.type', table2options(D.VITRAGES), { vide: libelleDefaut(D.VITRAGES, c.vitrageType), cls: 'span-2' }) +
+      liste('Menuiserie', base + '.menuiserie', table2options(D.MENUISERIES),
+        { vide: D.find(D.MENUISERIES, c.menuiserie) ? libelleDefaut(D.MENUISERIES, c.menuiserie) : 'Comme le logement (non précisée)', cls: 'span-2' }) +
+      liste('Volet roulant', base + '.volet', [{ value: 'oui', label: 'Oui' }, { value: 'non', label: 'Non' }],
+        { vide: 'Comme le logement (' + (c.volets === 'oui' ? 'oui' : 'non') + ')', cls: 'span-2' });
+  }
+
+  // Uw et facteur solaire retenus pour une baie.
+  function texteUw(v) {
+    var f = C.fenetre(v, state.climat);
+    return '<p class="hint">' + esc(f.type.label) + (f.menuiserie ? ', menuiserie ' + esc(f.menuiserie.label.toLowerCase()) : '') +
+      ' : Uw ' + nf(f.uw, 2) + ' W/m².K' + (f.volet === 'oui' ? ' (' + nf(Math.max(f.uw - 0.2, 0.5), 2) + ' volet fermé la nuit)' : '') +
+      ' · facteur solaire ' + nf(f.g, 2) + (f.menuiserie ? '' : ' (fenêtre courante)') + '.</p>';
   }
 
   // Saisie rapide : un niveau de vitrage global au lieu de chaque fenêtre.
@@ -528,9 +568,8 @@
       '<p class="hint" id="' + idAide + '"></p>' +
       '<div class="grid">' +
       liste('Orientation principale', base + '.orientation', orientations, { cls: 'span-2' }) +
-      liste('Type de vitrage', base + '.type', table2options(D.VITRAGES), { cls: 'span-2' }) +
-      bascule('Volets roulants', base + '.volet', OUI_NON, { obligatoire: true, cls: 'span-2' }) +
-      '</div>';
+      choixFenetre(base) +
+      '</div>' + texteUw(getPath(state, base));
   }
 
   function renderVitrages(objet, cible, idAide) {

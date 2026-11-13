@@ -273,6 +273,7 @@
             (pb.local.id !== 'cave_chauffee' ? ' + ' + F.isolantTexte(k.isolantPlancher) : '') + ' (U ' + F.nf(u.plancher, 2) + ')';
         })()],
         ['Planchers entre étages', F.libelle(D.PLANCHERS_ETAGE, k.plancherEtage || 'lourd')],
+        ['Fenêtres du logement', F.texteFenetre({}, k)],
         ['Toiture', F.libelle(D.TOITURES, k.toitureType) + (k.toitureType !== 'aucune' ? ' + ' + F.isolantTexte(k.isolantToiture) : '') + ' (U ' + F.nf(u.toiture, 2) + ')'],
         ['Ventilation', F.libelle(D.VENTILATIONS, k.ventilation) +
           (k.ventilation === 'double_flux' ? ' (rendement ' + (C.estVide(k.rendementDF) ? '80' : k.rendementDF) + ' %)' : '') +
@@ -403,7 +404,7 @@
     // Version client : pas de détail des calculs pièce par pièce.
     (interne ? sources : []).forEach(function (p, i) {
       var r = res.pieces[i];
-      var vitrages = F.lignesVitrages(p, r);
+      var vitrages = F.lignesVitrages(p, r, k);
       var lignes = [
         ['Dimensions', p.virtuel || p.saisieSurface === 'surface'
           ? F.nf(r.surface, 1) + ' m² × ' + (p.virtuel ? F.nf(C.num(p.hauteur), 2) : p.hauteur || '?') + ' m · ' + F.nf(r.volume, 1) + ' m³'

@@ -335,14 +335,29 @@
     { id: 'pu', label: 'Polyuréthane (PU)', lambda: 0.025 }
   ];
 
-  // Vitrages : U = Uw et g = Sw de la fenêtre entière (menuiserie comprise), car la surface saisie
-  // est celle de la baie mesurée en tableau (tables 3CL-DPE 2021, fenêtre battante courante).
+  // Vitrages. La surface saisie est celle de la baie mesurée en tableau (fenêtre entière).
+  // ug, gv : vitrage seul (Ug, facteur solaire du verre) ; avec une menuiserie connue,
+  //   Uw = 0,7 × Ug + 0,3 × Uf + ψ (0,18 W/m².K pour l'intercalaire des vitrages multiples) et g = 0,7 × gv
+  //   (EN ISO 10077-1, châssis 30 % : retrouve le tableau Uw de Thermexcel à ±0,1 près).
+  // u, g : fenêtre courante quand la menuiserie n'est pas précisée (tables 3CL-DPE 2021, relevés antérieurs).
   var VITRAGES = [
-    { id: 'simple', label: 'Simple vitrage', u: 5.8, g: 0.60 },
-    { id: 'double', label: 'Double vitrage ancien (lame d\'air)', u: 2.8, g: 0.52 },
-    { id: 'double_argon', label: 'Double vitrage récent (argon, faible émissivité)', u: 1.4, g: 0.45 },
-    { id: 'triple', label: 'Triple vitrage', u: 1.0, g: 0.40 }
+    { id: 'simple', label: 'Simple vitrage', ug: 5.7, gv: 0.85, u: 5.8, g: 0.60 },
+    { id: 'double_ancien', label: 'Double vitrage ancien, lame d\'air fine (4/6/4, avant 1990)', ug: 3.3, gv: 0.76, u: 3.1, g: 0.53 },
+    { id: 'double', label: 'Double vitrage standard, lame d\'air (4/16/4)', ug: 2.9, gv: 0.75, u: 2.8, g: 0.52 },
+    { id: 'double_fe', label: 'Double vitrage faible émissivité, lame d\'air', ug: 1.75, gv: 0.65, u: 2.0, g: 0.46 },
+    { id: 'double_argon', label: 'Double vitrage faible émissivité, argon (récent)', ug: 1.2, gv: 0.63, u: 1.4, g: 0.45 },
+    { id: 'triple', label: 'Triple vitrage, argon', ug: 0.7, gv: 0.55, u: 1.0, g: 0.40 }
   ];
+
+  // Menuiseries (châssis) : Uf en W/m².K (Thermexcel ; bois et mixte : valeurs courantes).
+  var MENUISERIES = [
+    { id: 'pvc', label: 'PVC', uf: 1.7 },
+    { id: 'bois', label: 'Bois', uf: 2.0 },
+    { id: 'mixte', label: 'Mixte bois-alu', uf: 1.8 },
+    { id: 'alu_rpt', label: 'Alu ou acier, à rupture de pont thermique', uf: 3.5 },
+    { id: 'alu', label: 'Alu ou acier, sans rupture de pont thermique', uf: 6.0 }
+  ];
+  var FENETRE = { partVitrage: 0.7, psiIntercalaire: 0.18 };
 
   // Rayonnement solaire de pointe d'été (W/m² de baie, à multiplier par g = Sw), baies sans protection.
   // w      : pointe SIMULTANÉE de la maison (éclairement de pointe × facteur de charge ASHRAE
@@ -653,6 +668,8 @@
     PONTS_THERMIQUES: PONTS_THERMIQUES,
     GLOBAL: GLOBAL,
     VITRAGES: VITRAGES,
+    MENUISERIES: MENUISERIES,
+    FENETRE: FENETRE,
     ORIENTATIONS: ORIENTATIONS,
     ORIENTATION_MIXTE: ORIENTATION_MIXTE,
     NIVEAUX_VITRAGE: NIVEAUX_VITRAGE,
