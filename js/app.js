@@ -97,6 +97,8 @@
       isolationMurs: 'chantier',
       mursIsolation: [],
       paroisLnc: [], // murs sur local non chauffé : { uid, longueur, local }
+      mansarde: '', hauteurMurets: '', profondeurPente: '', cotesPente: '2',
+      zone: '', // uid de la zone de chauffage (vide : la première)
       mursExposes: '',
       lineaire: '',
       sousToiture: 'oui',
@@ -156,10 +158,12 @@
       installation: {
         ballonTampon: '', volumeTampon: '', ecsPac: '', ballonThermo: '', ecsEmplacement: '',
         electrique: '', regulation: '', miniTableau: '',
-        distUiUe: '', distUeTableau: '', distUiTableau: '', condensats: '',
+        distUiUe: '', distUeTableau: '', distUiTableau: '', distTableauSousTableau: '', condensats: '',
         regimeEau: '55/45',
         hauteurRadiateur: '',
-        unites: [] // unités extérieures (prises en compte à partir de deux)
+        unites: [], // unités extérieures (prises en compte à partir de deux)
+        zones: [{ uid: uid(), nom: '', emetteur: 'radiateurs' }], // zones de chauffage (air/eau)
+        nbZones: '1'
       },
       prime: { personnes: '', rfr: '', zone: 'hors_idf' },
       pieces: [nouvellePiece(1)],
@@ -172,6 +176,8 @@
     var base = nouveauChantier();
     var out = Object.assign({}, base, c);
     ['client', 'installation', 'prime'].forEach(function (k) { out[k] = Object.assign({}, base[k], c[k]); });
+    if (!Array.isArray(out.installation.zones) || !out.installation.zones.length) out.installation.zones = base.installation.zones;
+    out.installation.nbZones = String(out.installation.zones.length);
     if (D.REGIMES_EAU_ANCIENS[out.installation.regimeEau]) out.installation.regimeEau = D.REGIMES_EAU_ANCIENS[out.installation.regimeEau];
     out.climat = Object.assign(climatDefaut(), c.climat);
     // Relevés antérieurs sans département : on garde leur température de base saisie.
@@ -451,18 +457,21 @@
         return r ? '<p class="reco-note"><strong>' + esc(r.type) + '</strong> · départ ' + r.depart + ' °C, retour ' + r.retour + ' °C</p>' : '';
       })() +
       '<p class="hint">Sert à vérifier les radiateurs existants et à choisir les neufs : les puissances catalogue sont données à ΔT50 (eau à 75 °C).</p>' +
+      renderZones() +
+      (!avecRadiateurs() ? '' :
       '<div class="grid">' +
       liste('Hauteur des radiateurs neufs', 'installation.hauteurRadiateur', D.HAUTEURS_RADIATEUR_NEUF.map(function (h) { return { value: String(h), label: h + ' mm' }; }),
         { vide: 'Toutes hauteurs', cls: 'span-2' }) +
       '</div>' +
       '<p class="hint">Radiateur neuf choisi dans le catalogue ' + esc(D.CATALOGUE_RADIATEURS.source) + ' (panneaux acier types 11, 21, 22, 33) : le moins puissant qui couvre le besoin de la pièce. ' +
-      'Fixer une hauteur sous une fenêtre, par exemple.</p>' +
+      'Fixer une hauteur sous une fenêtre, par exemple.</p>') +
       '<div class="grid">' +
       bascule('Ballon tampon', 'installation.ballonTampon') +
       (i.ballonTampon === 'oui' ? champ('Volume du ballon tampon', 'installation.volumeTampon', { kind: 'num', unite: 'L' }) : '<div class="spacer"></div>') +
       bascule('ECS produite par la PAC ?', 'installation.ecsPac') +
       (i.ecsPac === 'non' ? bascule('Ballon thermodynamique ?', 'installation.ballonThermo') : '<div class="spacer"></div>') +
-      (i.ecsPac === 'oui' || (i.ecsPac === 'non' && i.ballonThermo === 'oui') ? emplacement : '') +
+      // Intégré ou déporté : seulement pour une ECS produite par la PAC (pas pour un ballon thermodynamique).
+      (i.ecsPac === 'oui' ? emplacement : '') +
       '</div>';
     return encart('installation', 'Installation', '',
       circuitEau +
@@ -473,10 +482,42 @@
       champ('Distance UI ↔ UE', 'installation.distUiUe', { kind: 'num', unite: 'm' }) +
       champ('Distance UE ↔ tableau', 'installation.distUeTableau', { kind: 'num', unite: 'm' }) +
       champ('Distance UI ↔ tableau', 'installation.distUiTableau', { kind: 'num', unite: 'm' }) +
+      champ('Distance tableau principal ↔ sous-tableau', 'installation.distTableauSousTableau', { kind: 'num', unite: 'm' }) +
       bascule('Évacuation condensats à proximité', 'installation.condensats') +
       '</div>' +
       '<p class="hint">Les autres informations servent au chiffrage, sans effet sur le calcul.</p>' +
       renderUnites());
+  }
+
+  // Émetteurs : 1 à 3 zones de chauffage, chacune en radiateurs ou en plancher chauffant.
+  function renderZones() {
+    var z = state.installation.zones;
+    return '<h3 class="sub-title">Émetteurs</h3><div class="grid">' +
+      bascule('Nombre de zones de chauffage', 'installation.nbZones', [['1', '1'], ['2', '2'], ['3', '3']], { obligatoire: true, cls: 'span-2' }) +
+      '</div>' +
+      z.map(function (x, k) {
+        return '<div class="vitrage"><div class="grid">' +
+          (z.length > 1 ? champ('Nom de la zone ' + (k + 1), 'installation.zones.' + k + '.nom', { autocomplete: 'off', placeholder: 'ex. RDC, étage', cls: 'span-2' }) : '') +
+          bascule(z.length > 1 ? 'Émetteurs de la zone ' + (k + 1) : 'Émetteurs', 'installation.zones.' + k + '.emetteur',
+            D.EMETTEURS.map(function (e) { return [e.id, e.label]; }), { obligatoire: true, cls: 'span-2' }) +
+          '</div></div>';
+      }).join('') +
+      '<p class="hint">' + (z.length > 1 ? 'Choisir la zone de chaque pièce dans l\'onglet Pièces. ' : '') +
+      'Plancher chauffant : pas de radiateur à relever ; la puissance par m² est comparée au maximum (100 W/m², 150 en salle de bain).</p>';
+  }
+
+  // Au moins une zone de chauffage en radiateurs.
+  function avecRadiateurs() {
+    return state.installation.zones.some(function (z) { return z.emetteur !== 'plancher'; });
+  }
+
+  function nomZone(z, k) {
+    return z.nom || 'Zone ' + (k + 1);
+  }
+
+  // Émetteur d'une pièce (zone choisie, sinon la première).
+  function emetteurPiece(p) {
+    return C.zoneDePiece(p, state.installation.zones).emetteur === 'plancher' ? 'plancher' : 'radiateurs';
   }
 
   // Unités extérieures : à partir de deux, chaque pièce est raccordée à l'une d'elles.
@@ -511,16 +552,27 @@
   }
 
   // cible : chemin de l'objet portant les vitrages (« pieces.0 » ou « global »).
+  var LIBELLES_BAIE = { fenetre: 'Fenêtre', toit: 'Fenêtre de toit', porte: 'Porte d\'entrée' };
+
+  // Baie : fenêtre (ou porte-fenêtre), fenêtre de toit ou porte d'entrée.
   function renderVitrage(cible, j) {
     var base = cible + '.vitrages.' + j;
+    var v = getPath(state, base);
+    var baie = C.typeBaie(v);
+    var orientations = D.ORIENTATIONS.filter(function (o) { return !!o.toit === (baie === 'toit'); })
+      .map(function (o) { return { value: o.id, label: baie === 'toit' ? o.label.replace('Fenêtre de toit – ', '') : o.label }; });
     return '<div class="vitrage">' +
-      '<div class="vitrage-head"><span>Vitrage ' + (j + 1) + '</span>' +
-      '<button type="button" class="btn ghost small danger" data-action="supprimer-vitrage" data-base="' + cible + '" data-j="' + j + '" aria-label="Supprimer le vitrage ' + (j + 1) + '">Supprimer</button></div>' +
+      '<div class="vitrage-head"><span>' + LIBELLES_BAIE[baie] + ' ' + (j + 1) + '</span>' +
+      '<button type="button" class="btn ghost small danger" data-action="supprimer-vitrage" data-base="' + cible + '" data-j="' + j + '" aria-label="Supprimer la baie ' + (j + 1) + '">Supprimer</button></div>' +
       '<div class="grid">' +
-      liste('Orientation', base + '.orientation', D.ORIENTATIONS.map(function (o) { return { value: o.id, label: o.label }; })) +
-      champ('Surface de la baie', base + '.surface', { kind: 'num', unite: 'm²' }) +
-      choixFenetre(base) +
-      '</div>' + texteUw(getPath(state, base)) + '</div>';
+      bascule('Type de baie', base + '.baie', [['fenetre', 'Fenêtre'], ['toit', 'De toit'], ['porte', 'Porte']], { obligatoire: true, cls: 'span-2' }) +
+      (baie === 'porte'
+        ? liste('Type de porte', base + '.porte', D.PORTES.map(function (p) { return { value: p.id, label: p.label + ' (U ' + nf(p.u, 1) + ')' }; }), { cls: 'span-2' }) +
+          champ('Surface de la porte', base + '.surface', { kind: 'num', unite: 'm²', placeholder: String(D.SURFACE_PORTE).replace('.', ',') })
+        : liste(baie === 'toit' ? 'Pan de toit' : 'Orientation', base + '.orientation', orientations) +
+          champ('Surface de la baie', base + '.surface', { kind: 'num', unite: 'm²' }) +
+          choixFenetre(base)) +
+      '</div>' + texteUw(v) + '</div>';
   }
 
   // Fenêtres du logement : valeurs par défaut de toutes les baies (modifiables baie par baie).
@@ -552,6 +604,7 @@
   // Uw et facteur solaire retenus pour une baie.
   function texteUw(v) {
     var f = C.fenetre(v, state.climat);
+    if (f.porte) return '<p class="hint">Porte : U ' + nf(f.uw, 1) + ' W/m².K.</p>';
     return '<p class="hint">' + esc(f.type.label) + (f.menuiserie ? ', menuiserie ' + esc(f.menuiserie.label.toLowerCase()) : '') +
       ' : Uw ' + nf(f.uw, 2) + ' W/m².K' + (f.volet === 'oui' ? ' (' + nf(Math.max(f.uw - 0.2, 0.5), 2) + ' volet fermé la nuit)' : '') +
       ' · facteur solaire ' + nf(f.g, 2) + (f.menuiserie ? '' : ' (fenêtre courante)') + '.</p>';
@@ -580,7 +633,11 @@
       (rapide
         ? renderVitrageRapide(cible, idAide)
         : objet.vitrages.map(function (v, j) { return renderVitrage(cible, j); }).join('') +
-          '<button type="button" class="btn small" data-action="ajouter-vitrage" data-base="' + cible + '">+ Ajouter un vitrage</button>');
+          '<div class="ajout-baies">' +
+          '<button type="button" class="btn small" data-action="ajouter-vitrage" data-baie="fenetre" data-base="' + cible + '">+ Fenêtre</button>' +
+          '<button type="button" class="btn small" data-action="ajouter-vitrage" data-baie="toit" data-base="' + cible + '">+ Fenêtre de toit</button>' +
+          '<button type="button" class="btn small" data-action="ajouter-vitrage" data-baie="porte" data-base="' + cible + '">+ Porte d\'entrée</button>' +
+          '</div>');
   }
 
   /* ---------- Type d'installation (début de parcours) ---------- */
@@ -709,6 +766,18 @@
       '<div class="span-2"><button type="button" class="btn small" data-action="ajouter-lnc" data-i="' + i + '">+ Mur sur local non chauffé</button></div>';
   }
 
+  // Pièce sous rampant : murets (jambettes), profondeur de la pente au sol, 1 ou 2 côtés en pente.
+  function renderMansarde(p, i) {
+    var b = 'pieces.' + i;
+    return bascule('Pièce mansardée (sous rampant) ?', b + '.mansarde', OUI_NON, { cls: 'span-2' }) +
+      (p.mansarde === 'oui'
+        ? bascule('Côtés en pente', b + '.cotesPente', [['1', '1 côté'], ['2', '2 côtés']], { obligatoire: true, cls: 'span-2' }) +
+          champ('Hauteur des murets (jambettes)', b + '.hauteurMurets', { kind: 'num', unite: 'm' }) +
+          champ('Profondeur de la pente au sol', b + '.profondeurPente', { kind: 'num', unite: 'm' }) +
+          '<p class="hint span-2" id="mansarde-aide-' + p.uid + '"></p>'
+        : '');
+  }
+
   function renderPiece(p, i) {
     var replie = ui.replie[p.uid];
     var corps = '';
@@ -729,10 +798,16 @@
         }) +
         renderIsolationMurs(p, i) +
         renderParoisLnc(p, i) +
+        (!airAir() && state.installation.zones.length >= 2
+          ? liste('Zone de chauffage', 'pieces.' + i + '.zone', state.installation.zones.map(function (z, k) {
+            return { value: z.uid, label: nomZone(z, k) + ' – ' + (z.emetteur === 'plancher' ? 'plancher chauffant' : 'radiateurs') };
+          }), { cls: 'span-2' })
+          : '') +
         (state.installation.unites.length >= 2
           ? liste('Unité extérieure', 'pieces.' + i + '.unite', state.installation.unites.map(function (u, k) { return { value: u.uid, label: nomUnite(u, k) }; }), { cls: 'span-2' })
           : '') +
         bascule('Pièce sous toiture ?', 'pieces.' + i + '.sousToiture', [['oui', 'Oui'], ['non', 'Non (étage interm.)']], { obligatoire: true, cls: 'span-2' }) +
+        (p.sousToiture !== 'non' ? renderMansarde(p, i) : '') +
         bascule('Pièce sur plancher bas ?', 'pieces.' + i + '.surPlancherBas', [['oui', 'Oui'], ['non', 'Non (à l\'étage)']], { obligatoire: true, cls: 'span-2' }) +
         '</div>' +
         '<h4 class="sub-title">Vitrages</h4>' +
@@ -750,7 +825,7 @@
         }) +
         '</div>' +
         '<div class="results" id="res-' + p.uid + '"></div>' +
-        (airAir() ? '' :
+        (airAir() || emetteurPiece(p) === 'plancher' ? '' :
           '<h4 class="sub-title">Radiateurs existants <span class="muted">(optionnel)</span></h4>' +
           renderRadiateurs(p, i));
     }
@@ -826,7 +901,9 @@
         '<td class="c-heat">' + W(r.chauffage) + '</td>' +
         '<td class="c-cool">' + W(r.climatisation) + '</td>' +
         '<td>' + (global ? '—' : esc(textePalierSplit(r.palierSplit))) + '</td>' +
-        (radiateurs
+        (radiateurs && r.plancherChauffant
+          ? '<td>Plancher chauffant<small>' + nf(r.plancherChauffant.wm2) + ' W/m²' + (r.plancherChauffant.suffisant ? '' : ' (> ' + r.plancherChauffant.limite + ')') + '</small></td><td>—</td>'
+          : radiateurs
           ? '<td>' + (global ? '—' : esc(F.textePalierRadiateur(r.radiateurNeuf, true)) +
               (r.radiateurNeuf.modele ? '<small>réf. ' + esc(r.radiateurNeuf.modele.ref) + '</small>' : '')) + '</td>' +
             '<td>' + (ex ? W(ex.puissance) + ' <span class="badge ' + (ex.suffisant ? 'ok">Suffisant' : 'ko">Insuffisant') + '</span>' : '—') + '</td>'
@@ -1210,8 +1287,12 @@
       '<div class="kpi cool"><span>Climatisation</span><strong>' + kW(r.climatisation) + '</strong><small>' + W(r.climatisation) + ' nominal</small></div>' +
       '</div>' +
       '<div class="reco"><span>Split préconisé (unité intérieure)</span><strong>' + textePalierSplit(r.palierSplit) + '</strong></div>' +
-      (airAir() ? '' :
-        '<div class="reco"><span>Radiateur neuf préconisé (' + esc(D.CATALOGUE_RADIATEURS.source) + ')</span><strong>' + textePalierRadiateur(r.radiateurNeuf) + '</strong>' +
+      (airAir() ? '' : r.plancherChauffant
+        ? '<div class="reco"><span>Plancher chauffant</span><strong>' + nf(r.plancherChauffant.wm2) + ' W/m²</strong>' +
+          (r.plancherChauffant.suffisant ? '<span class="badge ok">≤ ' + r.plancherChauffant.limite + ' W/m²</span>'
+            : '<span class="badge ko">Au-delà de ' + r.plancherChauffant.limite + ' W/m² : appoint ou isolation</span>') +
+          '<small class="reco-note">besoin ' + W(r.chauffage) + ' sur ' + nf(r.surface, 1) + ' m² ; maximum EN 1264 (surface à 29 °C, 33 °C en salle de bain)</small></div>'
+        : '<div class="reco"><span>Radiateur neuf préconisé (' + esc(D.CATALOGUE_RADIATEURS.source) + ')</span><strong>' + textePalierRadiateur(r.radiateurNeuf) + '</strong>' +
         (r.radiateurNeuf.valeur && r.facteurRegime !== 1
           ? '<small class="reco-note">soit ' + W(r.radiateurNeuf.valeur * r.facteurRegime) + ' avec une sortie d\'eau à ' + F.esc(String(state.installation.regimeEau).split('/')[0]) + ' °C, pour un besoin de ' + W(r.chauffage) + '</small>'
           : '') +
@@ -1401,6 +1482,12 @@
         if (champLong) champLong.placeholder = C.estVide(m.longueur) ? 'auto : ' + nf(sg ? sg.longueur : 0, 2) + ' (reste)' : '';
         setHTML('mur-iso-' + p.uid + '-' + k, sg ? nf(sg.longueur, 2) + ' ml retenus · U ' + nf(sg.u, 2) + ' W/m².K' : '');
       });
+      var m = r.mansarde;
+      setHTML('mansarde-aide-' + p.uid, m
+        ? 'Hauteur saisie = partie haute ; pente le long de la ' + (p.saisieSurface === 'surface' ? 'pièce (carré de même surface)' : 'longueur') +
+          '. Toiture : rampants ' + nf(m.rampants, 1) + ' m² + plafond ' + nf(m.plafond, 1) + ' m² + murets ' + nf(m.murets, 1) + ' m² ; volume ' + nf(m.volume, 1) +
+          ' m³. Murs extérieurs : ne compter que les murs pleine hauteur (pignons).'
+        : '');
       var champConfort = document.querySelector('[data-bind="pieces.' + i + '.tConfortHiver"]');
       if (champConfort) champConfort.placeholder = 'auto : ' + nf(C.num(state.climat.tConfortHiver), 1);
       var champOcc = document.querySelector('[data-bind="pieces.' + i + '.occupants"]');
@@ -1538,6 +1625,21 @@
       var v = bt.dataset.value;
       setPath(state, path, getPath(state, path) === v && bt.hasAttribute('data-clear') ? '' : v);
       if (path === 'climat.cote') majTemperatureBase();
+      if (path === 'installation.nbZones') {
+        var zs = state.installation.zones;
+        var nz = Math.max(1, Math.min(3, parseInt(v, 10) || 1));
+        while (zs.length < nz) zs.push({ uid: uid(), nom: '', emetteur: zs.length ? zs[zs.length - 1].emetteur : 'radiateurs' });
+        zs.length = nz;
+      }
+      // Type de baie changé : orientation (pan de toit ou façade) et porte par défaut cohérentes.
+      if (/\.vitrages\.\d+\.baie$/.test(path)) {
+        var baieV = getPath(state, path.replace(/\.baie$/, ''));
+        var o = D.find(D.ORIENTATIONS, baieV.orientation);
+        if (v === 'toit' && !(o && o.toit)) baieV.orientation = 'toit';
+        if (v === 'fenetre' && o && o.toit) baieV.orientation = 'S';
+        if (v === 'porte' && !baieV.porte) baieV.porte = 'bois';
+        if (v === 'porte' && C.estVide(baieV.surface)) baieV.surface = String(D.SURFACE_PORTE);
+      }
       // Choix du nombre de murs exposés : le linéaire est recalculé (saisie manuelle effacée).
       var mm = /^pieces\.(\d+)\.mursExposes$/.exec(path);
       if (mm) state.pieces[+mm[1]].lineaire = '';
@@ -1590,7 +1692,11 @@
         render();
         return;
       case 'ajouter-vitrage':
-        getPath(state, bt.dataset.base).vitrages.push(nouveauVitrage());
+        var nv = nouveauVitrage();
+        nv.baie = bt.dataset.baie || 'fenetre';
+        if (nv.baie === 'toit') nv.orientation = 'toit';
+        if (nv.baie === 'porte') { nv.porte = 'bois'; nv.surface = String(D.SURFACE_PORTE); nv.orientation = 'N'; }
+        getPath(state, bt.dataset.base).vitrages.push(nv);
         break;
       case 'ajouter-mur-isolation':
         p.mursIsolation.push(nouveauMurIsolation(state.climat));

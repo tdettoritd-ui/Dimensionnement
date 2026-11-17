@@ -838,3 +838,65 @@ test('fenêtres : vitrage × menuiserie (Uw), valeurs du logement, baie différe
   proche(r.deperditions.vitrages, 2 * (def.uw - 0.2));
   proche(r.apports.solaires, 2 * def.g * D.find(D.ORIENTATIONS, 'S').wPiece);
 });
+
+test('baies : fenêtre de toit et porte d\'entrée', () => {
+  const p = { longueur: '4', largeur: '4', hauteur: '2,5', lineaire: '8', sousToiture: 'oui', debit: '20', vitrages: [] };
+  const base = C.calculPiece(p, climat);
+  // Porte : U de la table, prise sur les murs, sans soleil (porte pleine).
+  const porte = C.calculPiece({ ...p, vitrages: [{ baie: 'porte', porte: 'bois', surface: '2', orientation: 'N' }] }, climat);
+  proche(porte.surfacePortes, 2);
+  assert.equal(porte.surfaceVitree, 0);
+  proche(porte.smur, base.smur - 2);
+  proche(porte.deperditions.vitrages, 2 * D.find(D.PORTES, 'bois').u);
+  assert.equal(porte.apports.solaires, 0);
+  assert.equal(C.fenetre({ baie: 'porte', porte: 'isolee' }, {}).uw, D.find(D.PORTES, 'isolee').u);
+  // Fenêtre de toit : prise sur la toiture, soleil du pan de toit (pan ensoleillé par défaut).
+  const toit = C.calculPiece({ ...p, vitrages: [{ baie: 'toit', orientation: 'S', type: 'double_argon', surface: '1' }] }, climat);
+  proche(toit.smur, base.smur);
+  assert.equal(C.typeBaie({ baie: 'toit', orientation: 'S' }), 'toit');
+  assert.equal(C.typeBaie({ orientation: 'toit_n' }), 'toit'); // relevés antérieurs
+  proche(toit.apports.solaires, D.find(D.VITRAGES, 'double_argon').g * D.find(D.ORIENTATIONS, 'toit').wPiece);
+});
+
+test('pièce mansardée : rampants, plafond, murets et volume', () => {
+  const p = { longueur: '5', largeur: '4', hauteur: '2,5', lineaire: '8', sousToiture: 'oui', debit: '20', vitrages: [],
+    mansarde: 'oui', cotesPente: '2', hauteurMurets: '1', profondeurPente: '1,5' };
+  const m = C.mansarde(p);
+  // 2 côtés de 5 m, pente 1,5 m au sol pour 1,5 m de dénivelé.
+  proche(m.rampants, 2 * 5 * Math.sqrt(1.5 * 1.5 + 1.5 * 1.5));
+  proche(m.plafond, 20 - 2 * 5 * 1.5);
+  proche(m.murets, 2 * 5 * 1);
+  proche(m.volume, 20 * 2.5 - 2 * 5 * 1.5 * 1.5 / 2);
+  const r = C.calculPiece(p, climat);
+  proche(r.volume, m.volume);
+  proche(r.surfaceToiture, m.rampants + m.plafond + m.murets);
+  proche(r.deperditions.toiture, r.u.toiture * r.surfaceToiture);
+  // Sans mansarde ou pièce à l'étage : inchangé.
+  assert.equal(C.mansarde({ ...p, mansarde: '' }), null);
+  assert.equal(C.mansarde({ ...p, sousToiture: 'non' }), null);
+  // Profondeur limitée à la pièce.
+  proche(C.mansarde({ ...p, profondeurPente: '9' }).plafond, 0);
+});
+
+test('zones de chauffage : radiateurs ou plancher chauffant', () => {
+  const P = (nom, zone) => ({ nom, longueur: '4', largeur: '4', hauteur: '2,5', lineaire: '8', sousToiture: 'non', vitrages: [], debit: '20', zone,
+    radiateurs: [{ materiau: 'fonte', hauteurElement: '600', elements: '10' }] });
+  const zones = [{ uid: 'rdc', nom: 'RDC', emetteur: 'plancher' }, { uid: 'etage', nom: 'Étage', emetteur: 'radiateurs' }];
+  const r = C.calculChantier({ climat, prime: {}, installation: { regimeEau: '45/35', zones }, pieces: [P('Séjour', 'rdc'), P('Chambre', 'etage'), P('Salle de bain', 'rdc')] });
+  // Plancher : pas de radiateur, puissance surfacique comparée au maximum (150 W/m² en salle de bain).
+  const sej = r.pieces[0];
+  assert.equal(sej.radiateurExistant, null);
+  assert.equal(sej.radiateurNeuf.plancher, true);
+  proche(sej.plancherChauffant.wm2, sej.chauffage / 16);
+  assert.equal(sej.plancherChauffant.limite, 100);
+  assert.equal(r.pieces[2].plancherChauffant.limite, 150);
+  // Radiateurs : inchangé.
+  assert.ok(r.pieces[1].radiateurExistant);
+  assert.equal(r.pieces[1].plancherChauffant, null);
+  // Bilan par zone.
+  assert.deepEqual(r.zones.map(z => [z.nom, z.emetteur, z.indices]), [['RDC', 'plancher', [0, 2]], ['Étage', 'radiateurs', [1]]]);
+  proche(r.zones[0].chauffage + r.zones[1].chauffage, r.chauffage);
+  // Sans zone saisie : une zone en radiateurs ; air/air : pas de zone.
+  assert.equal(C.calculChantier({ climat, prime: {}, pieces: [P('Séjour')] }).zones[0].emetteur, 'radiateurs');
+  assert.equal(C.calculChantier({ climat, systeme: 'air_air', prime: {}, pieces: [P('Séjour')] }).zones.length, 0);
+});

@@ -359,6 +359,23 @@
   ];
   var FENETRE = { partVitrage: 0.7, psiIntercalaire: 0.18 };
 
+  // Portes d'entrée : U (W/m².K, ordres de grandeur des tables 3CL-DPE) et facteur solaire (partie vitrée).
+  var PORTES = [
+    { id: 'bois', label: 'Bois ou PVC pleine, ancienne', u: 3.5, g: 0 },
+    { id: 'vitree', label: 'Bois ou PVC avec partie vitrée (simple vitrage)', u: 4.0, g: 0.1 },
+    { id: 'metal', label: 'Métal pleine, non isolée', u: 5.8, g: 0 },
+    { id: 'isolee', label: 'Porte isolée récente (alu, acier ou PVC à âme isolante)', u: 1.6, g: 0 },
+    { id: 'isolee_vitree', label: 'Porte isolée récente avec vitrage isolant', u: 2.0, g: 0.1 }
+  ];
+  // Émetteurs d'une zone de chauffage (air/eau) ; plancher chauffant : puissance surfacique maximale
+  // (EN 1264 : surface à 29 °C en pièce de vie, 33 °C en salle de bain).
+  var EMETTEURS = [
+    { id: 'radiateurs', label: 'Radiateurs' },
+    { id: 'plancher', label: 'Plancher chauffant' }
+  ];
+  var PLANCHER_CHAUFFANT = { limite: 100, limiteHumide: 150 }; // W/m²
+  var SURFACE_PORTE = 2; // m² : porte d'entrée courante 0,90 × 2,15 m
+
   // Rayonnement solaire de pointe d'été (W/m² de baie, à multiplier par g = Sw), baies sans protection.
   // w      : pointe SIMULTANÉE de la maison (éclairement de pointe × facteur de charge ASHRAE
   //          « maison entière ») : total chantier (groupe extérieur, PAC air/air, gainable).
@@ -669,6 +686,10 @@
     GLOBAL: GLOBAL,
     VITRAGES: VITRAGES,
     MENUISERIES: MENUISERIES,
+    PORTES: PORTES,
+    EMETTEURS: EMETTEURS,
+    PLANCHER_CHAUFFANT: PLANCHER_CHAUFFANT,
+    SURFACE_PORTE: SURFACE_PORTE,
     FENETRE: FENETRE,
     ORIENTATIONS: ORIENTATIONS,
     ORIENTATION_MIXTE: ORIENTATION_MIXTE,

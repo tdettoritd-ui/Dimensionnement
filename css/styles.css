@@ -628,3 +628,4 @@ table.recap td.recap-noms { text-align: left; white-space: normal; min-width: 14
 .plan-actions { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .plans-ajout { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .plans-ajout .btn { cursor: pointer; }
+.ajout-baies { display: flex; flex-wrap: wrap; gap: 6px; }

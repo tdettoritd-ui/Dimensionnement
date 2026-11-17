@@ -79,7 +79,7 @@
     var ecs = ins.ecsPac === 'oui' ? 'Par la PAC'
       : ins.ecsPac === 'non' ? (ins.ballonThermo === 'oui' ? 'Ballon thermodynamique' : ins.ballonThermo === 'non' ? 'Autre (hors PAC / thermo.)' : 'Hors PAC')
         : '';
-    if (ecs && ins.ecsEmplacement && (ins.ecsPac === 'oui' || ins.ballonThermo === 'oui')) {
+    if (ecs && ins.ecsEmplacement && ins.ecsPac === 'oui') {
       ecs += ' – ' + (ins.ecsEmplacement === 'integre' ? 'intégré' : 'déporté');
     }
     return ecs;
@@ -89,6 +89,7 @@
   // Vitrage, menuiserie, Uw et volet effectifs d'une baie (ceux du logement si non précisés).
   function texteFenetre(v, climat) {
     var f = C.fenetre(v, climat);
+    if (f.porte) return 'porte ' + f.porte.label.toLowerCase() + ' (U ' + nf(f.uw, 1) + ')';
     return f.type.label + (f.menuiserie ? ', ' + f.menuiserie.label.toLowerCase() : '') + ' (Uw ' + nf(f.uw, 2) + ')' + (f.volet === 'oui' ? ' · volet' : '');
   }
 
@@ -100,7 +101,9 @@
         ' · ' + libelleOrientation(g.orientation) + ' · ≈ ' + nf(resultat.surfaceVitree, 1) + ' m² · ' + texteFenetre(g, climat)];
     }
     return piece.vitrages.map(function (v) {
-      return libelleOrientation(v.orientation) + ' · ' + (v.surface || '0') + ' m² · ' + texteFenetre(v, climat);
+      var baie = C.typeBaie(v);
+      var ou = baie === 'porte' ? 'Porte d\'entrée' : baie === 'toit' && !(D.find(D.ORIENTATIONS, v.orientation) || {}).toit ? 'Fenêtre de toit' : libelleOrientation(v.orientation);
+      return ou + ' · ' + (v.surface || '0') + ' m² · ' + texteFenetre(v, climat);
     });
   }
 

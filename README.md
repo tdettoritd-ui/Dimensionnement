@@ -82,6 +82,12 @@ En ITI, les planchers d'étage et les refends dominent ; en ITE, ce sont le plan
 
 **Fenêtres (vitrage × menuiserie)** : vitrage, menuiserie et volets roulants du logement (Climat), repris par toutes les baies sauf celles où un autre choix est fait (« Comme le logement » par défaut). Six vitrages (simple ; double ancien 4/6/4 ; double standard 4/16/4 ; double faible émissivité air ; double faible émissivité argon ; triple) et cinq menuiseries (PVC Uf 1,7 ; bois 2,0 ; mixte bois-alu 1,8 ; alu ou acier à rupture de pont thermique 3,5 ; sans rupture 6,0). `Uw = 0,7 × Ug + 0,3 × Uf + 0,18` (intercalaire, 0 en simple vitrage) et `g = 0,7 × g du verre` (EN ISO 10077-1, châssis 30 %), ce qui retrouve le tableau Uw de Thermexcel à ±0,1. Menuiserie « non précisée » (relevés antérieurs) : Uw et g de fenêtre courante des tables 3CL, résultats inchangés. Volet roulant : −0,2 W/m².K en hiver.
 
+**Baies** : fenêtre (ou porte-fenêtre), fenêtre de toit (pan ensoleillé ou Nord, prise sur la toiture) ou porte d'entrée (U de la table `PORTES` : 1,6 à 5,8 W/m².K, 2 m² par défaut, prise sur les murs, sans soleil sauf partie vitrée).
+
+**Pièce mansardée** (sous rampant) : 1 ou 2 côtés en pente le long de la longueur, murets (jambettes) de hauteur hj, pente sur une profondeur d au sol, hauteur H en partie haute. Toiture = rampants `n × L × √(d² + (H − hj)²)` + plafond plat `S − n × L × d` + murets `n × L × hj` (comptés avec la toiture) ; volume `S × H − n × L × d × (H − hj) / 2`. Murs extérieurs : seulement les murs pleine hauteur (pignons).
+
+**Émetteurs (air/eau)** : 1 à 3 zones de chauffage, chacune en radiateurs ou en plancher chauffant ; chaque pièce choisit sa zone. Plancher chauffant : pas de radiateur relevé ni préconisé ; puissance surfacique = besoin / surface au sol, comparée au maximum de l'EN 1264 (100 W/m², 150 en salle de bain). Besoin par zone dans le compte rendu.
+
 **Saisie rapide des vitrages** : surface vitrée = pourcentage de la surface au sol de la pièce selon le niveau (table `NIVEAUX_VITRAGE` de `js/data.js`), avec une orientation principale, un type de vitrage et la présence de volets. L'orientation « Plusieurs orientations » utilise la moyenne des rayonnements de la table.
 
 **NF EN 12831 (révision novembre 2026)** : déperditions pièce par pièce selon la méthode de la norme et de son annexe nationale NF P52-612/CN, d'après les tableaux de la page Thermexcel « Calcul des déperditions thermiques NF EN 12831 » :

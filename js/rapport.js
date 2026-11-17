@@ -98,6 +98,11 @@
     var k = state.climat;
     var ins = state.installation;
     var airAir = res.systeme === 'air_air';
+    // Zones de chauffage : émetteur de chacune (et son besoin s'il y en a plusieurs).
+    var texteEmetteurs = res.zones.map(function (z) {
+      return (res.zones.length > 1 ? z.nom + ' : ' : '') + (z.emetteur === 'plancher' ? 'plancher chauffant' : 'radiateurs') +
+        (res.zones.length > 1 ? ' (' + F.kW(z.chauffage) + ')' : '');
+    }).join('\n');
     var y = MARGE;
 
     function page() { return doc.getCurrentPageInfo().pageNumber; }
@@ -250,11 +255,12 @@
         ['Installation prévue', [
           ['Type d\'installation', F.libelle(D.SYSTEMES, res.systeme)],
           ['Sortie d\'eau PAC', ins.regimeEau ? F.libelle(D.REGIMES_EAU, ins.regimeEau) : ''],
+          ['Émetteurs', texteEmetteurs],
           ['ECS', F.texteEcs(ins)],
           ['Ballon tampon', F.texteOuiNon(ins.ballonTampon) + (ins.ballonTampon === 'oui' && ins.volumeTampon ? ' – ' + ins.volumeTampon + ' L' : '')],
           ['Électricité', ins.electrique === 'mono' ? 'Monophasé' : ins.electrique === 'tri' ? 'Triphasé' : ''],
           ['Régulation connectée', F.texteOuiNon(ins.regulation)]
-        ].filter(function (l) { return !(airAir && /^(Ballon tampon|ECS|Sortie d)/.test(l[0])); })]
+        ].filter(function (l) { return !(airAir && /^(Ballon tampon|ECS|Sortie d|Émetteurs)/.test(l[0])) && !(l[0] === 'Émetteurs' && !l[1]); })]
       );
     } else paire(
       ['Climat / enveloppe', [
@@ -291,10 +297,12 @@
         ['Distance UI ↔ UE', F.avecUnite(ins.distUiUe, 'm')],
         ['Distance UE ↔ tableau', F.avecUnite(ins.distUeTableau, 'm')],
         ['Distance UI ↔ tableau', F.avecUnite(ins.distUiTableau, 'm')],
+        ['Tableau principal ↔ sous-tableau', F.avecUnite(ins.distTableauSousTableau, 'm')],
         ['Condensats à proximité', F.texteOuiNon(ins.condensats)],
         ['Sortie d\'eau PAC', ins.regimeEau ? F.libelle(D.REGIMES_EAU, ins.regimeEau) : ''],
+        ['Émetteurs', texteEmetteurs],
         ['Hauteur radiateurs neufs', C.estVide(ins.hauteurRadiateur) ? 'Toutes' : ins.hauteurRadiateur + ' mm']
-      ].filter(function (l) { return !(airAir && /^(Ballon tampon|ECS|Sortie d|Hauteur rad)/.test(l[0])); })]
+      ].filter(function (l) { return !(airAir && /^(Ballon tampon|ECS|Sortie d|Hauteur rad|Émetteurs)/.test(l[0])) && !(l[0] === 'Émetteurs' && !l[1]); })]
     );
 
     // Pièces calculées : celles du relevé, ou les niveaux du mode global (logement saisi d'un bloc).
@@ -333,7 +341,8 @@
       var unite = res.unites.filter(function (u) { return u.indices.indexOf(i) >= 0; })[0];
       return [
         t(p.nom + (unite ? '\n' + unite.nom : '')), t(F.nf(r.surface, 1) + ' m²'), t(F.W(r.chauffage)), t(F.W(r.climatisation)),
-        t(global ? '—' : F.textePalierSplit(r.palierSplit)), t(global ? '—' : F.textePalierRadiateur(r.radiateurNeuf, true)),
+        t(global ? '—' : F.textePalierSplit(r.palierSplit)),
+        t(global ? '—' : r.plancherChauffant ? 'Plancher ch. ' + F.nf(r.plancherChauffant.wm2) + ' W/m²' : F.textePalierRadiateur(r.radiateurNeuf, true)),
         t(ex ? F.W(ex.puissance) + (ex.suffisant ? ' – suffisant' : ' – insuffisant') : '—')
       ].slice(0, colonnes);
     });
@@ -409,6 +418,9 @@
         ['Dimensions', p.virtuel || p.saisieSurface === 'surface'
           ? F.nf(r.surface, 1) + ' m² × ' + (p.virtuel ? F.nf(C.num(p.hauteur), 2) : p.hauteur || '?') + ' m · ' + F.nf(r.volume, 1) + ' m³'
           : (p.longueur || '?') + ' × ' + (p.largeur || '?') + ' × ' + (p.hauteur || '?') + ' m · ' + F.nf(r.surface, 1) + ' m² · ' + F.nf(r.volume, 1) + ' m³'],
+        ['Mansarde', r.mansarde ? r.mansarde.cotes + ' côté' + (r.mansarde.cotes > 1 ? 's' : '') + ' en pente, murets ' + F.nf(r.mansarde.hauteurMurets, 2) +
+          ' m, pente ' + F.nf(r.mansarde.profondeur, 2) + ' m au sol : rampants ' + F.nf(r.mansarde.rampants, 1) + ' m², plafond ' + F.nf(r.mansarde.plafond, 1) +
+          ' m², murets ' + F.nf(r.mansarde.murets, 1) + ' m²' : ''],
         ['Murs ext. exposés', (p.virtuel || r.lineaire > 0 || !C.estVide(p.lineaire) || !C.estVide(p.mursExposes)
           ? F.nf(r.lineaire, 1) + ' ml' + (!p.virtuel && !C.estVide(p.mursExposes) ? ' (' + p.mursExposes + ' mur' + (C.num(p.mursExposes) > 1 ? 's' : '') + (r.lineaireAuto ? ', calculé' : '') + ')' : '')
           : '—') + ' · sous toiture : ' + F.texteOuiNon(p.sousToiture) +
@@ -435,10 +447,12 @@
         ['Déperditions G', F.nf(r.G, 2) + ' W/K (dont ponts thermiques ' + F.nf(r.deperditions.pontsThermiques, 2) + ') · base ' +
           F.W(r.chauffageBase) + ' + relance ' + F.nf(r.surpuissance) + ' %' +
           (r.tConfortAuto ? '' : ' · confort ' + F.nf(r.tConfortHiver, 1) + ' °C (propre à la pièce)')],
-        ['Radiateur neuf préconisé', F.textePalierRadiateur(r.radiateurNeuf) +
+        ['Plancher chauffant', r.plancherChauffant ? F.nf(r.plancherChauffant.wm2) + ' W/m² (maximum ' + r.plancherChauffant.limite + ' W/m²' +
+          (r.plancherChauffant.suffisant ? ')' : ' : dépassé, prévoir un appoint ou renforcer l\'isolation)') : ''],
+        ['Radiateur neuf préconisé', r.plancherChauffant ? '' : F.textePalierRadiateur(r.radiateurNeuf) +
           (r.facteurRegime !== 1 && r.radiateurNeuf.valeur ? ', soit ' + F.W(r.radiateurNeuf.valeur * r.facteurRegime) + ' en ' + ins.regimeEau + ' °C' : '')],
         ['Radiateurs existants', F.texteRadiateurExistant(p, r, ins.regimeEau)]
-      ].filter(function (l) { return !((p.virtuel || airAir) && /^Radiateur/.test(l[0])) && !(/^(Isolation des murs|Murs sur local|Sol)/.test(l[0]) && !l[1]); })
+      ].filter(function (l) { return !((p.virtuel || airAir || r.plancherChauffant) && /^Radiateur/.test(l[0])) && !(/^(Isolation des murs|Murs sur local|Sol|Mansarde|Plancher chauffant|Radiateur neuf)/.test(l[0]) && !l[1]); })
         .map(function (l) { return [t(l[0]), t(l[1])]; });
       var nom = t(p.nom);
       sautSiBesoin(Math.min(hauteurBloc(nom, lignes) * 1.1, HAUT - BAS - MARGE - 2));

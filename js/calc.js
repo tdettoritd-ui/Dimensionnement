@@ -146,7 +146,7 @@
     var volumes = 0, aire = 0, perimetre = 0;
     sources.forEach(function (p) {
       var s = surfacePiece(p);
-      volumes += s * num(p.hauteur);
+      volumes += volumePiece(p);
       if (p.surPlancherBas !== 'non') { aire += s; perimetre += lineairePiece(p); }
     });
     var type = D.find(D.VENTILATIONS, climat.ventilation) || D.VENTILATIONS[0];
@@ -173,7 +173,7 @@
   // debit : débit pour les déperditions d'hiver ; debitEte : renouvellement d'été (sans infiltrations).
   function ventilationPiece(piece, climat, ctx) {
     var type = D.find(D.VENTILATIONS, climat.ventilation) || D.VENTILATIONS[0];
-    var volume = surfacePiece(piece) * num(piece.hauteur);
+    var volume = volumePiece(piece);
     var etancheite = D.find(D.ETANCHEITES, climat.etancheite) || D.find(D.ETANCHEITES, 'moyenne');
     var n50 = num(climat.n50) > 0 ? num(climat.n50) : etancheite.n50;
     var facades = piece.facades !== undefined ? num(piece.facades)
@@ -269,6 +269,10 @@
   // Menuiserie connue : Uw et g calculés (EN ISO 10077-1) ; sinon valeurs courantes 3CL du vitrage.
   function fenetre(vitrage, climat) {
     var c = climat || {};
+    if (typeBaie(vitrage) === 'porte') {
+      var porte = D.find(D.PORTES, vitrage.porte) || D.PORTES[0];
+      return { type: porte, porte: porte, menuiserie: null, volet: 'non', uw: porte.u, g: porte.g };
+    }
     var type = D.find(D.VITRAGES, vitrage.type) || D.find(D.VITRAGES, c.vitrageType) || D.find(D.VITRAGES, 'double');
     var menuiserie = D.find(D.MENUISERIES, estVide(vitrage.menuiserie) ? c.menuiserie : vitrage.menuiserie);
     var volet = vitrage.volet === 'oui' || vitrage.volet === 'non' ? vitrage.volet : (c.volets === 'oui' ? 'oui' : 'non');
@@ -324,15 +328,55 @@
     return o && o.cren ? o.cren.slice() : valeurs;
   }
 
-  function fenetreDeToit(vitrage) {
+  // Baie : 'fenetre' (fenêtre ou porte-fenêtre), 'toit' (fenêtre de toit) ou 'porte' (porte d'entrée) ;
+  // relevés antérieurs : fenêtre de toit reconnue à son orientation.
+  function typeBaie(vitrage) {
+    if (vitrage.baie === 'porte' || vitrage.baie === 'toit') return vitrage.baie;
     var o = D.find(D.ORIENTATIONS, vitrage.orientation);
-    return !!(o && o.toit);
+    return o && o.toit ? 'toit' : 'fenetre';
+  }
+
+  // Orientation utilisée pour le soleil : une fenêtre de toit sans pan précisé est sur un pan ensoleillé.
+  function orientationBaie(vitrage) {
+    var o = D.find(D.ORIENTATIONS, vitrage.orientation);
+    if (typeBaie(vitrage) === 'toit' && !(o && o.toit)) return 'toit';
+    return vitrage.orientation;
+  }
+
+  function fenetreDeToit(vitrage) {
+    return typeBaie(vitrage) === 'toit';
   }
 
   // Surface au sol de la pièce : saisie directe en m², ou longueur × largeur.
   function surfacePiece(piece) {
     if (piece.saisieSurface === 'surface') return Math.max(num(piece.surface), 0);
     return num(piece.longueur) * num(piece.largeur);
+  }
+
+  // Pièce mansardée (sous rampant) : 1 ou 2 côtés en pente le long de la longueur (√S en saisie par
+  // surface), murets (jambettes) de hauteur hj, pente sur une profondeur d au sol, hauteur H en partie haute.
+  // Toiture = rampants + plafond plat + murets ; volume réduit des parties sous la pente. null sinon.
+  function mansarde(piece) {
+    if (piece.sousToiture === 'non' || piece.mansarde !== 'oui') return null;
+    var s = surfacePiece(piece);
+    var long = piece.saisieSurface === 'surface' ? Math.sqrt(s) : num(piece.longueur);
+    var n = piece.cotesPente === '1' ? 1 : 2;
+    var H = Math.max(num(piece.hauteur), 0);
+    var hj = Math.min(Math.max(num(piece.hauteurMurets), 0), H);
+    var d = long > 0 ? Math.min(Math.max(num(piece.profondeurPente), 0), s / (n * long)) : 0;
+    var dz = H - hj;
+    return {
+      cotes: n, longueur: long, hauteurMurets: hj, profondeur: d,
+      rampants: n * long * Math.sqrt(d * d + dz * dz),
+      plafond: Math.max(s - n * long * d, 0),
+      murets: n * long * hj,
+      volume: Math.max(s * H - n * long * d * dz / 2, 0)
+    };
+  }
+
+  function volumePiece(piece) {
+    var m = mansarde(piece);
+    return m ? m.volume : surfacePiece(piece) * num(piece.hauteur);
   }
 
   // Linéaire de murs extérieurs d'après le nombre de murs exposés (0 à 4), côtés a ≥ b :
@@ -726,10 +770,11 @@
       if (!(s > 0)) return;
       var f = fenetre(v, climat);
       var verticale = !fenetreDeToit(v);
-      solaires += s * f.g * rayonnementPiece(v.orientation) * (legere && verticale ? K.solaireLeger : 1);
-      solairesSimultanes += s * f.g * rayonnement(v.orientation);
+      var or = orientationBaie(v);
+      solaires += s * f.g * rayonnementPiece(or) * (legere && verticale ? K.solaireLeger : 1);
+      solairesSimultanes += s * f.g * rayonnement(or);
       var facteur = legere && verticale ? K.solaireLeger : 1;
-      rayonnementCreneaux(v.orientation).forEach(function (w, j) { solairesCreneaux[j] += s * f.g * w * facteur; });
+      rayonnementCreneaux(or).forEach(function (w, j) { solairesCreneaux[j] += s * f.g * w * facteur; });
       vitrages += Math.max(f.uw, U_VITRAGE_MIN) * s * ecart;
     });
 
@@ -811,7 +856,8 @@
     u.mur = 0;
     segments.forEach(function (sg) { u.mur += sg.f * sg.uMur; });
     var s = surfacePiece(piece);
-    var volume = s * num(piece.hauteur);
+    var volume = volumePiece(piece);
+    var mans = mansarde(piece);
     var sousToiture = piece.sousToiture !== 'non';
     var uToiture = sousToiture ? u.toiture : 0;
     var surPlancherBas = piece.surPlancherBas !== 'non';
@@ -826,19 +872,22 @@
     }
 
     var surfaceVitree = 0;
+    var surfacePortes = 0;
     var surfaceFenetresToit = 0;
     var deperditionsVitrages = 0;
     vitragesPiece(piece).forEach(function (v) {
       var surface = Math.max(num(v.surface), 0);
-      surfaceVitree += surface;
+      if (typeBaie(v) === 'porte') surfacePortes += surface; else surfaceVitree += surface;
       if (fenetreDeToit(v)) surfaceFenetresToit += surface;
       deperditionsVitrages += uVitrage(v, climat) * surface;
     });
 
     // Les baies verticales sont prises sur les murs, les fenêtres de toit sur la toiture.
     var lineaire = lineairePiece(piece);
-    var smur = Math.max(lineaire * num(piece.hauteur) - (surfaceVitree - surfaceFenetresToit), 0);
-    var surfaceToiture = Math.max(s - surfaceFenetresToit, 0);
+    // Les portes d'entrée sont prises sur les murs comme les fenêtres.
+    var smur = Math.max(lineaire * num(piece.hauteur) - (surfaceVitree + surfacePortes - surfaceFenetresToit), 0);
+    // Mansarde : rampants, plafond plat et murets (jambettes) comptés avec la toiture.
+    var surfaceToiture = Math.max((mans ? mans.rampants + mans.plafond + mans.murets : s) - surfaceFenetresToit, 0);
     var vent = ventilationPiece(piece, climat, ctx);
     var debit = vent.debit;
     var pt = pontsThermiquesMurs(piece, segments);
@@ -874,6 +923,13 @@
       debit: vent.debitEte, pontsThermiques: pt, segments: segments
     });
 
+    var plancherCh = null;
+    if (piece.emetteur === 'plancher') {
+      var limite = D.MOTIF_PIECE_HUMIDE.test(String(piece.nom || '')) && !/cuisine/i.test(String(piece.nom || ''))
+        ? D.PLANCHER_CHAUFFANT.limiteHumide : D.PLANCHER_CHAUFFANT.limite;
+      var wm2 = s > 0 ? chauffage / s : 0;
+      plancherCh = { wm2: wm2, limite: limite, suffisant: wm2 <= limite };
+    }
     // Radiateurs : puissances catalogue (ΔT50) ramenées au régime d'eau de l'installation.
     var facteur = facteurRegime(regimeEau, tConfort);
     // Plusieurs radiateurs dans la pièce : leurs puissances s'additionnent.
@@ -902,6 +958,9 @@
       surface: s,
       volume: volume,
       surfaceVitree: surfaceVitree,
+      surfacePortes: surfacePortes,
+      surfaceToiture: surfaceToiture,
+      mansarde: mans,
       surfaceFenetresToit: surfaceFenetresToit,
       smur: smur,
       lineaire: lineaire,
@@ -932,7 +991,10 @@
       palierSplit: palier(clim.nominale / 1000, D.PALIERS_SPLIT),
       facteurRegime: facteur,
       // Palier catalogue (ΔT50) dont la puissance au régime d'eau couvre le besoin.
-      radiateurNeuf: facteur > 0 ? radiateurNeuf(chauffage / facteur, hauteurRadiateur) : { valeur: null, depasse: chauffage > 0 },
+      // Zone en plancher chauffant : pas de radiateur ; puissance surfacique à comparer au maximum.
+      plancherChauffant: plancherCh,
+      radiateurNeuf: plancherCh ? { valeur: null, depasse: false, plancher: true }
+        : facteur > 0 ? radiateurNeuf(chauffage / facteur, hauteurRadiateur) : { valeur: null, depasse: chauffage > 0 },
       radiateurExistant: radiateur
     };
   }
@@ -940,6 +1002,18 @@
   // Type d'installation : 'air_eau' (défaut, relevés antérieurs) ou 'air_air'.
   function systemeChantier(chantier) {
     return chantier && chantier.systeme === 'air_air' ? 'air_air' : 'air_eau';
+  }
+
+  // Zones de chauffage (air/eau) : au moins une, en radiateurs par défaut.
+  function zonesChantier(chantier) {
+    var z = chantier.installation && Array.isArray(chantier.installation.zones) ? chantier.installation.zones : [];
+    return z.length ? z : [{ uid: '', nom: '', emetteur: 'radiateurs' }];
+  }
+
+  // Zone d'une pièce : celle choisie si elle existe, sinon la première.
+  function zoneDePiece(piece, zones) {
+    for (var k = 0; k < zones.length; k++) if (zones[k].uid && zones[k].uid === piece.zone) return zones[k];
+    return zones[0];
   }
 
   // Unités extérieures déclarées dans l'installation, prises en compte à partir de deux.
@@ -1014,6 +1088,14 @@
     // Pièces calculées : celles du relevé, ou les niveaux virtuels du mode global.
     var sources = global ? piecesGlobales(chantier.global, foyer.n) : (chantier.pieces || []);
     if (airAir) sources = sources.map(function (p) { return Object.assign({}, p, { radiateur: null, radiateurs: [] }); });
+    // Air/eau : émetteur de la zone de chaque pièce ; plancher chauffant : radiateurs relevés ignorés.
+    var zones = airAir || global ? [] : zonesChantier(chantier);
+    if (zones.length) {
+      sources = sources.map(function (p) {
+        var z = zoneDePiece(p, zones);
+        return z.emetteur === 'plancher' ? Object.assign({}, p, { radiateur: null, radiateurs: [], emetteur: 'plancher' }) : p;
+      });
+    }
     var hauteurRadiateur = chantier.installation ? chantier.installation.hauteurRadiateur : '';
     var ctx = contexteChantier(chantier.climat || {}, sources, global ? Math.max(num((chantier.global || {}).surface), 0) : 0);
     var pieces = sources.map(function (p) { return calculPiece(p, chantier.climat, regimeEau, foyer.n, hauteurRadiateur, ctx); });
@@ -1062,6 +1144,13 @@
       climSommePieces: bilan.sommePieces,
       // Unités extérieures (au moins deux déclarées) : bilan de chacune ; vide sinon.
       unites: unites,
+      // Zones de chauffage (air/eau) : émetteur, pièces et besoin de chacune.
+      zones: zones.map(function (z, k) {
+        var indices = [];
+        sources.forEach(function (p, i) { if (zoneDePiece(p, zones) === z) indices.push(i); });
+        return { uid: z.uid, nom: z.nom || 'Zone ' + (k + 1), emetteur: z.emetteur === 'plancher' ? 'plancher' : 'radiateurs', indices: indices,
+          chauffage: indices.reduce(function (t, i) { return t + pieces[i].chauffage; }, 0) };
+      }),
       foyer: foyer,
       palierChauffage: palier(chauffage / 1000, D.PALIERS_PAC),
       palierClimatisation: palier(bilan.climatisation / 1000, D.PALIERS_PAC),
@@ -1111,6 +1200,7 @@
     contreCloison: contreCloison,
     plancherBas: plancherBas,
     uVitrage: uVitrage,
+    typeBaie: typeBaie,
     fenetre: fenetre,
     palier: palier,
     radiateurExistant: radiateurExistant,
@@ -1134,12 +1224,15 @@
     piecesGlobales: piecesGlobales,
     puissanceNominale: puissanceNominale,
     surfacePiece: surfacePiece,
+    mansarde: mansarde,
+    volumePiece: volumePiece,
     lineaireMurs: lineaireMurs,
     lineairePiece: lineairePiece,
     vitragesPiece: vitragesPiece,
     calculPiece: calculPiece,
     calculChantier: calculChantier,
     uniteDePiece: uniteDePiece,
+    zoneDePiece: zoneDePiece,
     systemeChantier: systemeChantier,
     seuilsAnah: seuilsAnah,
     categorieAnah: categorieAnah
