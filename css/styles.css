@@ -549,6 +549,20 @@ table.mini tr.total th { color: var(--text); }
 }
 .chantier-load > * { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .empty { padding: 20px 0; text-align: center; }
+.synchro { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); padding: 12px; margin: 8px 0 12px; }
+.synchro p { margin: 0 0 8px; }
+.synchro .grid { margin-bottom: 4px; }
+.synchro .btn.primary { width: 100%; margin-top: 8px; }
+.synchro.connecte { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.synchro.connecte p { margin: 0; min-width: 0; }
+.synchro-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.a-envoyer { font-style: normal; font-weight: 600; color: var(--warn); }
+.synchro-etat { margin: 1px 0 0; font-size: .75rem; color: var(--muted); display: flex; align-items: center; gap: 5px; }
+.synchro-etat[hidden] { display: none; }
+.synchro-etat::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: none; }
+.synchro-etat.ok::before { background: var(--ok); }
+.synchro-etat.encours::before { background: var(--accent); }
+.synchro-etat.off::before { background: var(--warn); }
 
 .envoi-actions { display: grid; gap: 8px; margin-top: 12px; }
 .btn:disabled { opacity: .5; cursor: default; }

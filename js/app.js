@@ -1,6 +1,8 @@
 /*
  * Interface du relevé : rendu, saisie, persistance locale, export PDF.
- * Tout est local à l'appareil : aucune donnée n'est envoyée à un serveur.
+ * Les chantiers sont stockés sur l'appareil ; si la synchronisation est configurée (js/config.js)
+ * et que l'utilisateur est connecté, ils sont aussi copiés sur le serveur (js/sync.js).
+ * Les plans (photos, fichiers) restent sur l'appareil où ils ont été ajoutés.
  */
 (function () {
   'use strict';
@@ -1776,13 +1778,15 @@
   function sauvegarder() {
     var l = chantiers();
     if (!state.id) state.id = uid();
-    var entree = { id: state.id, savedAt: new Date().toISOString(), data: JSON.parse(JSON.stringify(state)) };
+    var entree = { id: state.id, savedAt: new Date().toISOString(), data: JSON.parse(JSON.stringify(state)), envoye: false };
     var idx = l.findIndex(function (c) { return c.id === state.id; });
     if (idx >= 0) l[idx] = entree; else l.unshift(entree);
     if (ecrire(CLE_CHANTIERS, l)) {
       modifie = false;
       ecrire(CLE_BROUILLON, state);
-      toast('Chantier sauvegardé');
+      var es = window.Sync.etat();
+      toast(es.configure && es.connecte ? 'Chantier sauvegardé — envoi vers tes autres appareils' : 'Chantier sauvegardé');
+      window.Sync.planifier();
     } else {
       toast('Échec de la sauvegarde (stockage indisponible ou plein)');
     }
@@ -1790,9 +1794,39 @@
   }
 
 
+  function heure(ms) {
+    return new Date(ms).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function blocSynchro(l) {
+    var es = window.Sync.etat();
+    if (!es.configure) return '';
+    if (!es.connecte) {
+      return '<form class="synchro" id="form-connexion">' +
+        '<p><strong>Synchronisation</strong><br><span class="muted small">Connecte-toi pour retrouver tes chantiers sur le téléphone, la tablette et l\'ordinateur. Les chantiers déjà sur cet appareil seront envoyés.</span></p>' +
+        '<div class="grid">' +
+        '<div class="field span-2"><label class="lbl" for="sync-email">Email</label><div class="ctrl"><span class="inp"><input id="sync-email" type="email" autocomplete="username" required></span></div></div>' +
+        '<div class="field span-2"><label class="lbl" for="sync-mdp">Mot de passe</label><div class="ctrl"><span class="inp"><input id="sync-mdp" type="password" autocomplete="current-password" required></span></div></div>' +
+        '</div>' +
+        '<p class="hint warn" id="sync-erreur">' + esc(es.erreur && es.erreur !== 'hors ligne' ? es.erreur : '') + '</p>' +
+        '<button type="submit" class="btn primary" id="sync-connecter">Se connecter</button>' +
+        '</form>';
+    }
+    var attente = l.filter(function (c) { return c.envoye !== true; }).length;
+    var info = es.enCours ? 'Synchronisation en cours…'
+      : es.erreur ? (es.erreur === 'hors ligne' ? 'Hors ligne' : es.erreur) + (attente ? ' · ' + attente + ' à envoyer' : '')
+      : (es.derniere ? 'Synchronisé à ' + heure(es.derniere) : 'Pas encore synchronisé') + (attente ? ' · ' + attente + ' à envoyer' : '');
+    return '<div class="synchro connecte">' +
+      '<p><strong>Synchronisation active</strong><br><span class="muted small">' + esc(es.email) + ' · ' + esc(info) + '</span></p>' +
+      '<div class="synchro-actions"><button type="button" class="btn small" data-sync="maintenant"' + (es.enCours ? ' disabled' : '') + '>Synchroniser</button>' +
+      '<button type="button" class="btn ghost small" data-sync="deconnexion">Se déconnecter</button></div>' +
+      '</div>';
+  }
+
   function afficherChantiers() {
     var l = chantiers();
-    var html = l.length
+    var es = window.Sync.etat();
+    var html = blocSynchro(l) + (l.length
       ? '<ul class="chantiers">' + l.map(function (c) {
         var cl = c.data.client || {};
         var res = C.calculChantier(normaliser(c.data));
@@ -1800,21 +1834,46 @@
           '<button type="button" class="chantier-load" data-load="' + esc(c.id) + '">' +
           '<strong>' + esc(cl.nom || 'Sans nom') + '</strong>' +
           '<span class="muted small">' + esc(dateFr(cl.date)) + (cl.adresse ? ' · ' + esc(cl.adresse) : '') + '</span>' +
-          '<span class="small">' + esc(F.libelle(D.SYSTEMES, res.systeme)) + ' · ' + kW(res.chauffage) + ' chauffage · ' + kW(res.climatisation) + ' clim</span>' +
+          '<span class="small">' + esc(F.libelle(D.SYSTEMES, res.systeme)) + ' · ' + kW(res.chauffage) + ' chauffage · ' + kW(res.climatisation) + ' clim' +
+          (es.configure && c.envoye !== true ? ' <em class="a-envoyer">à envoyer</em>' : '') + '</span>' +
           '</button>' +
           '<button type="button" class="btn ghost icon-btn danger" data-delete="' + esc(c.id) + '" aria-label="Supprimer ce chantier">' +
           '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>' +
           '</li>';
       }).join('') + '</ul>'
-      : '<p class="muted empty">Aucun chantier sauvegardé sur cet appareil.</p>';
+      : '<p class="muted empty">Aucun chantier sauvegardé' + (es.configure && es.connecte ? '' : ' sur cet appareil') + '.</p>');
     document.getElementById('liste-chantiers').innerHTML = html +
-      '<p class="hint">Les chantiers sont stockés uniquement sur cet appareil, dans ce navigateur.</p>';
+      '<p class="hint">' + (es.configure && es.connecte
+        ? 'Les chantiers sauvegardés sont copiés sur le serveur et disponibles sur tous les appareils connectés. Les plans (photos, fichiers) restent sur l\'appareil où ils ont été ajoutés.'
+        : 'Les chantiers sont stockés uniquement sur cet appareil, dans ce navigateur.') + '</p>';
   }
 
   var dlg = document.getElementById('dlg-chantiers');
 
+  dlg.addEventListener('submit', function (e) {
+    if (e.target.id !== 'form-connexion') return;
+    e.preventDefault();
+    var bt = document.getElementById('sync-connecter');
+    var err = document.getElementById('sync-erreur');
+    bt.disabled = true; bt.textContent = 'Connexion…'; err.textContent = '';
+    window.Sync.connecter(document.getElementById('sync-email').value, document.getElementById('sync-mdp').value)
+      .then(function (b) {
+        afficherChantiers();
+        toast(b ? 'Connecté : chantiers synchronisés' : 'Connecté');
+      }, function (ex) {
+        bt.disabled = false; bt.textContent = 'Se connecter';
+        err.textContent = ex.code === 'hors_ligne' ? 'Pas de réseau : réessaie avec une connexion.' : ex.message;
+      });
+  });
+
   dlg.addEventListener('click', function (e) {
     if (e.target === dlg || e.target.closest('[data-close]')) { dlg.close(); return; }
+    var sy = e.target.closest('[data-sync]');
+    if (sy) {
+      if (sy.dataset.sync === 'maintenant') window.Sync.synchroniser();
+      else if (confirm('Se déconnecter ? Les chantiers restent sur cet appareil, mais ne seront plus synchronisés.')) { window.Sync.deconnecter(); afficherChantiers(); }
+      return;
+    }
     var load = e.target.closest('[data-load]');
     var del = e.target.closest('[data-delete]');
     if (load) {
@@ -1840,6 +1899,7 @@
       if (!cible) return;
       if (!confirm('Supprimer définitivement le chantier « ' + ((cible.data.client || {}).nom || 'Sans nom') + ' » ?')) return;
       ecrire(CLE_CHANTIERS, l.filter(function (x) { return x.id !== cible.id; }));
+      window.Sync.supprimer(cible.id);
       nettoyerPlans(idsPlans(cible.data));
       if (state.id === cible.id) { state.id = null; ecrire(CLE_BROUILLON, state); rafraichir(); }
       afficherChantiers();
@@ -1973,6 +2033,44 @@
 
   window.Entreprise.initialiser();
   window.Envoi.initialiser();
+
+  /* ---------- Synchronisation entre appareils ---------- */
+
+  function etatSynchro(es) {
+    var el = document.getElementById('etat-synchro');
+    if (el) {
+      var attente = chantiers().filter(function (c) { return c.envoye !== true; }).length;
+      el.hidden = !es.configure;
+      el.className = 'synchro-etat ' + (!es.connecte ? 'off' : es.enCours ? 'encours' : es.erreur ? 'off' : 'ok');
+      el.textContent = !es.connecte ? 'Non synchronisé'
+        : es.enCours ? 'Synchronisation…'
+        : es.erreur ? (es.erreur === 'hors ligne' ? 'Hors ligne' : 'Synchro en erreur') + (attente ? ' · ' + attente + ' à envoyer' : '')
+        : 'Synchronisé' + (es.derniere ? ' ' + heure(es.derniere) : '');
+    }
+    // Rafraîchit la liste ouverte, sauf pendant la saisie des identifiants.
+    var f = document.getElementById('form-connexion');
+    if (dlg.open && !(f && f.contains(document.activeElement))) afficherChantiers();
+  }
+
+  // Chantiers modifiés sur un autre appareil : recharge le relevé ouvert s'il n'est pas en cours de modification.
+  function recus(ids) {
+    if (!state.id || ids.indexOf(state.id) < 0) return;
+    var c = chantiers().find(function (x) { return x.id === state.id; });
+    if (!c) { state.id = null; ecrire(CLE_BROUILLON, state); rafraichir(); toast('Ce relevé a été supprimé sur un autre appareil'); return; }
+    if (modifie) { toast('Ce relevé a été modifié sur un autre appareil : « Sauver » remplacera cette version'); return; }
+    state = normaliser(c.data);
+    state.id = c.id;
+    ecrire(CLE_BROUILLON, state);
+    render();
+    toast('Relevé mis à jour depuis un autre appareil');
+  }
+
+  window.Sync.initialiser({
+    lireChantiers: chantiers,
+    ecrireChantiers: function (l) { ecrire(CLE_CHANTIERS, l); },
+    etat: etatSynchro,
+    recus: recus
+  });
 
   // Mises à jour : vérifiées à chaque retour sur l'application (une application installée reste
   // ouverte en arrière-plan) ; quand la nouvelle version prend la main, la page se recharge

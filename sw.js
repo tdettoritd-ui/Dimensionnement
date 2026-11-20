@@ -1,6 +1,6 @@
 // Service worker : met l'application en cache pour un usage hors ligne sur le terrain.
 // Incrémenter VERSION à chaque modification des fichiers listés.
-var VERSION = 'releve-pac-v42';
+var VERSION = 'releve-pac-v43';
 var FICHIERS = [
   './',
   './index.html',
@@ -12,6 +12,8 @@ var FICHIERS = [
   './js/plans.js',
   './js/rapport.js',
   './js/envoi.js',
+  './js/config.js',
+  './js/sync.js',
   './js/app.js',
   './vendor/jspdf.umd.min.js',
   './vendor/jspdf.plugin.autotable.min.js'
