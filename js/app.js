@@ -1617,7 +1617,7 @@
     if (bt.dataset.onglet) { changerOnglet(bt.dataset.onglet, false); return; }
     // Récapitulatif : une pièce ouvre l'onglet Pièces sur elle ; raccourcis PDF / sauvegarde.
     if (bt.dataset.allerPiece) { changerOnglet('pieces', false); allerPiece(bt.dataset.allerPiece, false); return; }
-    if (bt.dataset.globalRecap === 'pdf') { document.getElementById('dlg-pdf').showModal(); return; }
+    if (bt.dataset.globalRecap === 'pdf') { ouvrirDialoguePdf(); return; }
     if (bt.dataset.globalRecap === 'sauver') { sauvegarder(); render(); return; }
 
     if (bt.dataset.set) {
@@ -1870,22 +1870,60 @@
 
   /* ---------- Export PDF ---------- */
 
+  // Le PDF est créé en arrière-plan ; le téléchargement part ensuite d'un appui de l'utilisateur.
+  // (Un téléchargement lancé automatiquement à la fin de la création est bloqué par les navigateurs
+  // ou soumis à une autorisation « téléchargements automatiques ».)
   var dlgPdf = document.getElementById('dlg-pdf');
+  var pdfPret = null;
+
+  function ouvrirDialoguePdf() {
+    pdfPret = null;
+    dlgPdf.querySelector('.pdf-choix').hidden = false;
+    document.getElementById('pdf-pret').hidden = true;
+    dlgPdf.showModal();
+  }
+
+  function partageFichierPossible(fichier) {
+    try {
+      return !!(navigator.canShare && navigator.share &&
+        navigator.canShare({ files: [new File([fichier.blob], fichier.nom, { type: 'application/pdf' })] }));
+    } catch (e) {
+      return false;
+    }
+  }
+
   dlgPdf.addEventListener('click', function (e) {
     if (e.target === dlgPdf || e.target.closest('[data-close]')) { dlgPdf.close(); return; }
     var b = e.target.closest('[data-pdf]');
-    if (!b) return;
-    dlgPdf.close();
-    exporterPdf(b.dataset.pdf);
+    if (b) { exporterPdf(b.dataset.pdf); return; }
+    var a = e.target.closest('[data-pdf-action]');
+    if (!a || !pdfPret) return;
+    if (a.dataset.pdfAction === 'telecharger') {
+      window.Rapport.telecharger(pdfPret);
+      toast('PDF enregistré : ' + pdfPret.nom);
+    } else if (a.dataset.pdfAction === 'ouvrir') {
+      var url = URL.createObjectURL(pdfPret.blob);
+      if (!window.open(url, '_blank')) window.location.href = url;
+      setTimeout(function () { URL.revokeObjectURL(url); }, 120000);
+    } else if (a.dataset.pdfAction === 'partager') {
+      navigator.share({ files: [new File([pdfPret.blob], pdfPret.nom, { type: 'application/pdf' })], title: pdfPret.nom })
+        .catch(function (err) { if (!err || err.name !== 'AbortError') toast('Partage impossible : ' + (err && err.message)); });
+    }
   });
 
   function exporterPdf(version) {
-    toast('Création du PDF…');
+    var statut = document.getElementById('pdf-statut');
+    dlgPdf.querySelector('.pdf-choix').hidden = true;
+    document.getElementById('pdf-pret').hidden = false;
+    dlgPdf.querySelectorAll('[data-pdf-action]').forEach(function (b) { b.disabled = true; });
+    statut.textContent = 'Création du PDF…';
     window.Rapport.generer(state, version).then(function (f) {
-      window.Rapport.telecharger(f);
-      toast('PDF enregistré : ' + f.nom);
+      pdfPret = f;
+      statut.textContent = 'PDF prêt : ' + f.nom;
+      dlgPdf.querySelectorAll('[data-pdf-action]').forEach(function (b) { b.disabled = false; });
+      dlgPdf.querySelector('[data-pdf-action="partager"]').hidden = !partageFichierPossible(f);
     }).catch(function (err) {
-      toast('PDF impossible : ' + err.message);
+      statut.textContent = 'PDF impossible : ' + err.message;
     });
   }
 
@@ -1897,7 +1935,7 @@
     switch (bt.dataset.global) {
       case 'nouveau': nouveauReleve(); break;
       case 'chantiers': afficherChantiers(); dlg.showModal(); break;
-      case 'pdf': dlgPdf.showModal(); break;
+      case 'pdf': ouvrirDialoguePdf(); break;
       case 'email': window.Envoi.ouvrir(state); break;
       case 'sauver': sauvegarder(); break;
     }

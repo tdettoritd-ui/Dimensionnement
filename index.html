@@ -88,6 +88,15 @@
         <button type="button" class="btn primary" data-pdf="client"><strong>PDF client</strong><span>Résultats et préconisations, sans le détail des calculs</span></button>
         <button type="button" class="btn" data-pdf="interne"><strong>PDF détaillé (interne)</strong><span>Compte rendu complet : enveloppe, installation, détail des calculs par pièce</span></button>
       </div>
+      <div class="pdf-pret" id="pdf-pret" hidden>
+        <p class="hint" id="pdf-statut" role="status"></p>
+        <div class="envoi-actions">
+          <button type="button" class="btn primary" data-pdf-action="telecharger">Télécharger le PDF</button>
+          <button type="button" class="btn" data-pdf-action="ouvrir">Ouvrir le PDF</button>
+          <button type="button" class="btn" data-pdf-action="partager" hidden>Partager le PDF…</button>
+        </div>
+        <p class="hint">Si le téléchargement ne démarre pas, « Ouvrir le PDF » l'affiche dans un nouvel onglet, d'où l'enregistrer ou l'imprimer.</p>
+      </div>
     </div>
   </dialog>
 
