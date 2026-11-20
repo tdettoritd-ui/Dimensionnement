@@ -629,3 +629,6 @@ table.recap td.recap-noms { text-align: left; white-space: normal; min-width: 14
 .plans-ajout { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .plans-ajout .btn { cursor: pointer; }
 .ajout-baies { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* L'attribut hidden l'emporte sur les display des composants. */
+[hidden] { display: none !important; }
