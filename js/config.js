@@ -5,6 +5,6 @@
  * publiée, l'accès aux données est protégé par la connexion et les règles de sécurité (supabase/schema.sql).
  */
 window.CONFIG_SYNCHRO = {
-  url: '',   // ex. 'https://abcdefghijkl.supabase.co'
-  cle: ''    // ex. 'sb_publishable_…' ou 'eyJhbGciOi…'
+  url: 'https://taxmynmugovbfyopnare.supabase.co',
+  cle: 'sb_publishable_dMWcHJ6LcRVWJfReg4QS3g_HwIPaapD'
 };
