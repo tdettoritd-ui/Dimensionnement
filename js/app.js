@@ -1,8 +1,7 @@
 /*
  * Interface du relevé : rendu, saisie, persistance locale, export PDF.
  * Les chantiers sont stockés sur l'appareil ; si la synchronisation est configurée (js/config.js)
- * et que l'utilisateur est connecté, ils sont aussi copiés sur le serveur (js/sync.js).
- * Les plans (photos, fichiers) restent sur l'appareil où ils ont été ajoutés.
+ * et que l'utilisateur est connecté, ils sont aussi copiés sur le serveur avec leurs plans (js/sync.js).
  */
 (function () {
   'use strict';
@@ -971,7 +970,8 @@
       '<label class="btn primary"><input type="file" accept="image/*" capture="environment" data-plan-ajout hidden>Prendre une photo</label>' +
       '<label class="btn"><input type="file" accept="image/*,application/pdf" multiple data-plan-ajout hidden>Ajouter des fichiers</label>' +
       '</div>' +
-      '<p class="hint">Plans, croquis ou photos (images ou PDF), enregistrés sur cet appareil avec le chantier. ' +
+      '<p class="hint">Plans, croquis ou photos (images ou PDF), enregistrés avec le chantier' +
+      (window.Sync.etat().connecte ? ' et copiés sur tes autres appareils à la sauvegarde. ' : ' sur cet appareil. ') +
       'Les images sont ajoutées en fin de PDF (client et détaillé) ; les plans PDF sont joints à l\'envoi par email.</p>');
   }
 
@@ -1813,7 +1813,7 @@
         '</form>';
     }
     var attente = l.filter(function (c) { return c.envoye !== true; }).length;
-    var info = es.enCours ? 'Synchronisation en cours…'
+    var info = es.enCours ? (es.detail || 'Synchronisation en cours') + '…'
       : es.erreur ? (es.erreur === 'hors ligne' ? 'Hors ligne' : es.erreur) + (attente ? ' · ' + attente + ' à envoyer' : '')
       : (es.derniere ? 'Synchronisé à ' + heure(es.derniere) : 'Pas encore synchronisé') + (attente ? ' · ' + attente + ' à envoyer' : '');
     return '<div class="synchro connecte">' +
@@ -1844,7 +1844,7 @@
       : '<p class="muted empty">Aucun chantier sauvegardé' + (es.configure && es.connecte ? '' : ' sur cet appareil') + '.</p>');
     document.getElementById('liste-chantiers').innerHTML = html +
       '<p class="hint">' + (es.configure && es.connecte
-        ? 'Les chantiers sauvegardés sont copiés sur le serveur et disponibles sur tous les appareils connectés. Les plans (photos, fichiers) restent sur l\'appareil où ils ont été ajoutés.'
+        ? 'Les chantiers sauvegardés et leurs plans sont copiés sur le serveur et disponibles sur tous les appareils connectés.'
         : 'Les chantiers sont stockés uniquement sur cet appareil, dans ce navigateur.') + '</p>';
   }
 
@@ -2043,7 +2043,7 @@
       el.hidden = !es.configure;
       el.className = 'synchro-etat ' + (!es.connecte ? 'off' : es.enCours ? 'encours' : es.erreur ? 'off' : 'ok');
       el.textContent = !es.connecte ? 'Non synchronisé'
-        : es.enCours ? 'Synchronisation…'
+        : es.enCours ? (es.detail || 'Synchronisation') + '…'
         : es.erreur ? (es.erreur === 'hors ligne' ? 'Hors ligne' : 'Synchro en erreur') + (attente ? ' · ' + attente + ' à envoyer' : '')
         : 'Synchronisé' + (es.derniere ? ' ' + heure(es.derniere) : '');
     }
@@ -2069,7 +2069,12 @@
     lireChantiers: chantiers,
     ecrireChantiers: function (l) { ecrire(CLE_CHANTIERS, l); },
     etat: etatSynchro,
-    recus: recus
+    recus: recus,
+    plans: { lire: window.Plans.lire, enregistrer: window.Plans.enregistrer },
+    // Fichiers reçus d'un autre appareil : affiche les vignettes du relevé ouvert.
+    plansRecus: function (ids) {
+      if (state.plans.some(function (pl) { return ids.indexOf(pl.id) >= 0; })) vignettesPlans();
+    }
   });
 
   // Mises à jour : vérifiées à chaque retour sur l'application (une application installée reste

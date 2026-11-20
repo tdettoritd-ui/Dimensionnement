@@ -34,7 +34,7 @@ Pour retrouver les chantiers sur le téléphone, la tablette et l'ordinateur, l'
 5. *Project Settings* > *API Keys* et *Data API* : reporter la clé **publique** (publishable / anon, jamais la clé secrète ou service_role) et l'URL du projet dans `js/config.js`.
 6. Dans l'application : *Chantiers* > se connecter. Les chantiers déjà présents sur l'appareil sont envoyés à la première connexion.
 
-Fonctionnement : la synchronisation a lieu à l'ouverture, au retour sur l'application, après chaque « Sauver » ou suppression, et toutes les minutes. Hors ligne, les chantiers restent sur l'appareil (« à envoyer ») et partent au retour du réseau. Si un même chantier est modifié sur deux appareils, la sauvegarde la plus récente l'emporte. Une suppression est transmise aux autres appareils. Les plans (photos, fichiers, stockés en IndexedDB) et le profil « Mon entreprise » restent propres à chaque appareil.
+Fonctionnement : la synchronisation a lieu à l'ouverture, au retour sur l'application, après chaque « Sauver » ou suppression, et toutes les minutes. Hors ligne, les chantiers restent sur l'appareil (« à envoyer ») et partent au retour du réseau. Si un même chantier est modifié sur deux appareils, la sauvegarde la plus récente l'emporte. Une suppression est transmise aux autres appareils. Les plans (photos, fichiers) sont envoyés dans l'espace de stockage privé « plans » de Supabase et téléchargés par les autres appareils (ils ne sont pas supprimés du serveur quand on les retire d'un chantier). Le profil « Mon entreprise » reste propre à chaque appareil.
 
 ## Structure
 
@@ -50,7 +50,8 @@ Fonctionnement : la synchronisation a lieu à l'ouverture, au retour sur l'appli
 | `js/app.js` | Rendu, saisie, chantiers sauvegardés, barre d'actions, thème |
 | `js/config.js` | Adresse et clé publique Supabase (vide = pas de synchronisation) |
 | `js/sync.js` | Synchronisation des chantiers entre appareils |
-| `supabase/schema.sql` | Table et règles de sécurité à créer dans Supabase |
+| `supabase/schema.sql` | Table, espace de stockage des plans et règles de sécurité à créer dans Supabase |
+| `supabase/plans.sql` | Ajout du stockage des plans pour une base créée avant cette fonction |
 | `css/styles.css` | Styles (clair/sombre) |
 | `vendor/` | jsPDF 4.2.1 et jspdf-autotable 5.0.8 (licence MIT, voir `vendor/LICENSES.txt`) |
 | `logo.png`, `logo-embleme.png`, `icon-*.png` | Logo C&H Énergie (PDF, en-tête, icône) — source : `assets/logo-source.png` |

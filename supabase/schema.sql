@@ -42,3 +42,14 @@ create policy "equipe modification" on public.chantiers for update to authentica
 
 revoke all on public.chantiers from anon;
 grant select, insert, update on public.chantiers to authenticated;
+
+-- Plans (photos, fichiers PDF) : espace de stockage privé « plans », réservé à l'équipe connectée.
+insert into storage.buckets (id, name, public) values ('plans', 'plans', false)
+on conflict (id) do nothing;
+
+drop policy if exists "equipe plans lecture" on storage.objects;
+drop policy if exists "equipe plans ajout" on storage.objects;
+drop policy if exists "equipe plans modification" on storage.objects;
+create policy "equipe plans lecture" on storage.objects for select to authenticated using (bucket_id = 'plans');
+create policy "equipe plans ajout" on storage.objects for insert to authenticated with check (bucket_id = 'plans');
+create policy "equipe plans modification" on storage.objects for update to authenticated using (bucket_id = 'plans') with check (bucket_id = 'plans');

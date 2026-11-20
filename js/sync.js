@@ -8,6 +8,10 @@
  * Une entrée locale porte « envoye: true » quand le serveur en a la même version ; les chantiers
  * déjà présents sur l'appareil avant la synchronisation n'ont pas ce champ et partent au premier envoi.
  * Une suppression laisse une trace locale (« pierre tombale ») jusqu'à ce que le serveur l'ait reçue.
+ *
+ * Plans (photos, fichiers) : chaque fichier est envoyé une fois dans l'espace de stockage « plans »
+ * (Supabase Storage) sous son identifiant, qui ne change jamais. Un appareil qui reçoit un chantier
+ * dont un plan lui manque le télécharge ensuite. Les fichiers ne sont pas supprimés du serveur.
  */
 (function (root) {
   'use strict';
@@ -64,6 +68,8 @@
   var CLE_SUPPR = 'dimclim.suppressions';
   var CLE_CURSEUR = 'dimclim.synchro.curseur';
   var CLE_DERNIERE = 'dimclim.synchro.derniere';
+  var CLE_PLANS = 'dimclim.synchro.plans'; // identifiants des plans dont le serveur a le fichier
+  var ATTENTE_ABSENT = 5 * 60 * 1000; // plan pas encore sur le serveur : on réessaie 5 min plus tard
   var RECOUVREMENT = 2 * 60 * 1000; // relit 2 min en arrière : rien n'est manqué si deux appareils écrivent en même temps
 
   function lire(cle, defaut) { try { var v = localStorage.getItem(cle); return v ? JSON.parse(v) : defaut; } catch (e) { return defaut; } }
@@ -71,7 +77,7 @@
 
   var hooks = null;
   var session = lire(CLE_SESSION, null);
-  var etat = { configure: !!(URL_BASE && CLE_API), connecte: !!session, email: session ? session.email : '', enCours: false, derniere: lire(CLE_DERNIERE, 0), erreur: '' };
+  var etat = { configure: !!(URL_BASE && CLE_API), connecte: !!session, email: session ? session.email : '', enCours: false, derniere: lire(CLE_DERNIERE, 0), erreur: '', detail: '' };
 
   function signaler() { if (hooks && hooks.etat) hooks.etat(Object.assign({}, etat)); }
 
@@ -112,15 +118,92 @@
     });
   }
 
-  function rest(chemin, options, deja) {
+  // Appel authentifié ; renouvelle la session une fois si le serveur la refuse. Résout la réponse brute.
+  function authentifie(chemin, options, deja) {
     return jeton(false).then(function (tk) {
-      var h = Object.assign({ apikey: CLE_API, Authorization: 'Bearer ' + tk, 'Content-Type': 'application/json' }, options.headers || {});
-      return appel('/rest/v1/' + chemin, Object.assign({}, options, { headers: h }));
+      var h = Object.assign({ apikey: CLE_API, Authorization: 'Bearer ' + tk }, options.headers || {});
+      return appel(chemin, Object.assign({}, options, { headers: h }));
     }).then(function (r) {
-      if (r.status === 401 && !deja) return jeton(true).then(function () { return rest(chemin, options, true); });
+      if (r.status === 401 && !deja) return jeton(true).then(function () { return authentifie(chemin, options, true); });
+      return r;
+    });
+  }
+
+  function rest(chemin, options) {
+    options = Object.assign({}, options, { headers: Object.assign({ 'Content-Type': 'application/json' }, options.headers || {}) });
+    return authentifie('/rest/v1/' + chemin, options).then(function (r) {
       if (!r.ok) return r.text().then(function (txt) { throw erreur('serveur', 'Erreur serveur (' + r.status + ') ' + txt.slice(0, 120)); });
       return r.status === 204 ? null : r.text().then(function (txt) { return txt ? JSON.parse(txt) : null; });
     });
+  }
+
+  /* ---------- Plans (fichiers) ---------- */
+
+  var absents = {}; // id → date du dernier essai de téléchargement sans fichier sur le serveur
+
+  function idsPlans(liste) {
+    var vus = {};
+    var ids = [];
+    liste.forEach(function (c) {
+      ((c.data && c.data.plans) || []).forEach(function (pl) {
+        if (pl && pl.id && !vus[pl.id] && /^[A-Za-z0-9_.-]+$/.test(pl.id)) { vus[pl.id] = true; ids.push(pl.id); }
+      });
+    });
+    return ids;
+  }
+
+  function lireLocal(id) {
+    return hooks.plans.lire(id).catch(function () { return null; });
+  }
+
+  // Envoie les fichiers présents ici que le serveur n'a pas encore.
+  function envoyerPlans() {
+    if (!hooks.plans) return Promise.resolve(0);
+    var connus = lire(CLE_PLANS, {});
+    var ids = idsPlans(hooks.lireChantiers()).filter(function (id) { return !connus[id]; });
+    var n = 0;
+    return ids.reduce(function (suite, id) {
+      return suite.then(function () {
+        return lireLocal(id).then(function (blob) {
+          if (!blob) return null;
+          etat.detail = 'Envoi des plans (' + (++n) + ')'; signaler();
+          return authentifie('/storage/v1/object/plans/' + id, {
+            method: 'POST',
+            headers: { 'Content-Type': blob.type || 'application/octet-stream', 'x-upsert': 'true' },
+            body: blob
+          }).then(function (r) {
+            if (!r.ok) return; // fichier refusé (trop lourd…) : réessayé à la prochaine synchro
+            var c = lire(CLE_PLANS, {}); c[id] = 1; ecrire(CLE_PLANS, c);
+          });
+        });
+      });
+    }, Promise.resolve()).then(function () { etat.detail = ''; return n; });
+  }
+
+  // Télécharge les fichiers des chantiers reçus qui manquent sur cet appareil.
+  function recevoirPlans() {
+    if (!hooks.plans) return Promise.resolve([]);
+    var recus = [];
+    var maintenant = Date.now();
+    var ids = idsPlans(hooks.lireChantiers()).filter(function (id) { return !(absents[id] > maintenant - ATTENTE_ABSENT); });
+    return ids.reduce(function (suite, id) {
+      return suite.then(function () {
+        return lireLocal(id).then(function (blob) {
+          if (blob) return null;
+          etat.detail = 'Réception des plans (' + (recus.length + 1) + ')'; signaler();
+          return authentifie('/storage/v1/object/authenticated/plans/' + id, { method: 'GET' }).then(function (r) {
+            if (!r.ok) { absents[id] = Date.now(); return null; }
+            return r.blob().then(function (b) {
+              return hooks.plans.enregistrer(id, b).then(function () {
+                var c = lire(CLE_PLANS, {}); c[id] = 1; ecrire(CLE_PLANS, c);
+                delete absents[id];
+                recus.push(id);
+              });
+            });
+          });
+        });
+      });
+    }, Promise.resolve()).then(function () { etat.detail = ''; return recus; });
   }
 
   /* ---------- Connexion ---------- */
@@ -161,7 +244,7 @@
 
     var curseur = lire(CLE_CURSEUR, null);
     var filtre = curseur ? '&updated_at=gt.' + encodeURIComponent(new Date(t(curseur) - RECOUVREMENT).toISOString()) : '';
-    var bilan = { recus: [], envoyes: 0 };
+    var bilan = { recus: [], envoyes: 0, plans: [] };
 
     return rest('chantiers?select=id,data,saved_at,deleted,updated_at&order=updated_at.asc&limit=1000' + filtre, { method: 'GET' })
       .then(function (rows) {
@@ -170,9 +253,12 @@
         hooks.ecrireChantiers(f.locaux);
         bilan.recus = f.modifies;
         if (rows.length) ecrire(CLE_CURSEUR, rows[rows.length - 1].updated_at);
-
+        // Plans d'abord : un autre appareil qui reçoit le chantier trouve ainsi ses fichiers.
+        return envoyerPlans();
+      })
+      .then(function () {
         // Envoi des chantiers sauvegardés ici et pas encore sur le serveur.
-        var aEnvoyer = f.locaux.filter(function (c) { return c.envoye !== true; });
+        var aEnvoyer = hooks.lireChantiers().filter(function (c) { return c.envoye !== true; });
         var suppr = lire(CLE_SUPPR, []);
         var lignes = aEnvoyer.map(function (c) { return { id: c.id, data: c.data, saved_at: c.savedAt, deleted: false }; })
           .concat(suppr.map(function (s) { return { id: s.id, data: null, saved_at: s.at, deleted: true }; }));
@@ -194,11 +280,14 @@
           bilan.envoyes = lignes.length;
         });
       })
-      .then(function () {
+      .then(function () { return recevoirPlans(); })
+      .then(function (plansRecus) {
+        bilan.plans = plansRecus;
         etat.derniere = Date.now(); ecrire(CLE_DERNIERE, etat.derniere);
         etat.erreur = '';
         return bilan;
       }, function (e) {
+        etat.detail = '';
         etat.erreur = e.code === 'hors_ligne' ? 'hors ligne' : e.message;
         if (e.code === 'deconnecte') etat.connecte = false;
         return null;
@@ -207,6 +296,7 @@
         etat.enCours = false;
         signaler();
         if (b && b.recus.length && hooks.recus) hooks.recus(b.recus);
+        if (b && b.plans && b.plans.length && hooks.plansRecus) hooks.plansRecus(b.plans);
         if (relancer) { relancer = false; planifier(); }
         return b;
       });

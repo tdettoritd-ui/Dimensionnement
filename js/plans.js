@@ -1,5 +1,6 @@
 /*
- * Plans du dossier client : photos et fichiers (images, PDF) stockés sur l'appareil (IndexedDB).
+ * Plans du dossier client : photos et fichiers (images, PDF) stockés sur l'appareil (IndexedDB),
+ * copiés sur le serveur quand la synchronisation est active (js/sync.js).
  * Le relevé ne garde que leur description { id, nom, type, taille } ; les fichiers sont trop lourds
  * pour le stockage du relevé. Les photos sont réduites (2000 px, JPEG) avant d'être enregistrées.
  */
@@ -74,6 +75,11 @@
     });
   }
 
+  // Enregistre un fichier reçu d'un autre appareil sous son identifiant d'origine.
+  function enregistrer(id, contenu) {
+    return operation('readwrite', function (s) { return s.put(contenu, id); });
+  }
+
   function lire(id) {
     return operation('readonly', function (s) { return s.get(id); });
   }
@@ -107,6 +113,7 @@
   root.Plans = {
     ajouter: ajouter,
     lire: lire,
+    enregistrer: enregistrer,
     supprimer: supprimer,
     estImage: estImage,
     imagePourPdf: imagePourPdf
