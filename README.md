@@ -4,7 +4,7 @@ Application web (PWA) pour réaliser un relevé technique chez un client et obte
 
 - Recalcul en direct à chaque saisie, sans bouton « calculer ».
 - Fonctionne **hors ligne** une fois chargée (service worker) et s'installe sur l'écran d'accueil (« Ajouter à l'écran d'accueil »).
-- **Aucune donnée envoyée à un serveur** : calcul et stockage (localStorage) restent sur l'appareil.
+- Calcul et stockage sur l'appareil. **Synchronisation des chantiers entre appareils** facultative (Supabase, voir plus bas) : sans configuration, aucune donnée ne quitte l'appareil.
 - Mobile-first, thèmes clair / sombre / automatique.
 - **PDF** généré directement sur l'appareil (logo et coordonnées de l'entreprise, synthèse, détail par pièce).
 - **Envoi par email** : partage du PDF via le menu du téléphone (Mail, Gmail, Outlook…), ou email pré-rempli dans la messagerie (destinataire, objet, synthèse).
@@ -23,6 +23,19 @@ npm test           # tests unitaires du moteur de calcul (node --test)
 
 Pour un usage terrain, héberger le dossier sur n'importe quel hébergement statique en HTTPS (GitHub Pages, Netlify…) : le mode hors ligne nécessite HTTPS (ou localhost). L'ouverture directe de `index.html` (file://) fonctionne aussi, sans le mode hors ligne.
 
+## Synchronisation entre appareils (facultative)
+
+Pour retrouver les chantiers sur le téléphone, la tablette et l'ordinateur, l'application peut copier les chantiers sauvegardés dans une base [Supabase](https://supabase.com) (offre gratuite suffisante). Sans configuration (`js/config.js` vide), elle reste 100 % locale.
+
+1. Créer un projet Supabase (région **Europe – Frankfurt**), avec l'API de données activée.
+2. *SQL Editor* > *New query* : coller le contenu de `supabase/schema.sql`, puis *Run*.
+3. *Authentication* > *Sign In / Providers* : désactiver **Allow new users to sign up** (seuls les comptes créés à la main pourront se connecter).
+4. *Authentication* > *Users* > *Add user* > *Create new user* : un compte par personne (email + mot de passe, *Auto Confirm User* coché).
+5. *Project Settings* > *API Keys* et *Data API* : reporter la clé **publique** (publishable / anon, jamais la clé secrète ou service_role) et l'URL du projet dans `js/config.js`.
+6. Dans l'application : *Chantiers* > se connecter. Les chantiers déjà présents sur l'appareil sont envoyés à la première connexion.
+
+Fonctionnement : la synchronisation a lieu à l'ouverture, au retour sur l'application, après chaque « Sauver » ou suppression, et toutes les minutes. Hors ligne, les chantiers restent sur l'appareil (« à envoyer ») et partent au retour du réseau. Si un même chantier est modifié sur deux appareils, la sauvegarde la plus récente l'emporte. Une suppression est transmise aux autres appareils. Les plans (photos, fichiers) sont envoyés dans l'espace de stockage privé « plans » de Supabase et téléchargés par les autres appareils (ils ne sont pas supprimés du serveur quand on les retire d'un chantier). Le profil « Mon entreprise » reste propre à chaque appareil.
+
 ## Structure
 
 | Fichier | Rôle |
@@ -35,11 +48,16 @@ Pour un usage terrain, héberger le dossier sur n'importe quel hébergement stat
 | `js/rapport.js` | Génération du PDF |
 | `js/envoi.js` | Envoi par email (partage / messagerie) |
 | `js/app.js` | Rendu, saisie, chantiers sauvegardés, barre d'actions, thème |
+| `js/config.js` | Adresse et clé publique Supabase (vide = pas de synchronisation) |
+| `js/sync.js` | Synchronisation des chantiers entre appareils |
+| `supabase/schema.sql` | Table, espace de stockage des plans et règles de sécurité à créer dans Supabase |
+| `supabase/plans.sql` | Ajout du stockage des plans pour une base créée avant cette fonction |
 | `css/styles.css` | Styles (clair/sombre) |
 | `vendor/` | jsPDF 4.2.1 et jspdf-autotable 5.0.8 (licence MIT, voir `vendor/LICENSES.txt`) |
 | `logo.png`, `logo-embleme.png`, `icon-*.png` | Logo C&H Énergie (PDF, en-tête, icône) — source : `assets/logo-source.png` |
 | `sw.js` | Cache hors ligne — **incrémenter `VERSION` à chaque mise à jour des fichiers** |
 | `tests/calc.test.js` | Tests du moteur de calcul |
+| `tests/sync.test.js` | Tests de la fusion des chantiers (synchronisation) |
 
 ## Méthode de calcul
 

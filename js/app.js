@@ -1,6 +1,7 @@
 /*
  * Interface du relevé : rendu, saisie, persistance locale, export PDF.
- * Tout est local à l'appareil : aucune donnée n'est envoyée à un serveur.
+ * Les chantiers sont stockés sur l'appareil ; si la synchronisation est configurée (js/config.js)
+ * et que l'utilisateur est connecté, ils sont aussi copiés sur le serveur avec leurs plans (js/sync.js).
  */
 (function () {
   'use strict';
@@ -863,8 +864,8 @@
   function renderRecapZones(res) {
     if (!res.zones.length) return '';
     var lignes = res.zones.map(function (z) {
-      return '<tr><th scope="row">' + esc(res.zones.length > 1 ? z.nom : 'Logement') + '</th>' +
-        '<td class="recap-noms">' + (z.emetteur === 'plancher' ? 'Plancher chauffant' : 'Radiateurs') + '</td>' +
+      return '<tr><th scope="row">' + esc(res.zones.length > 1 ? z.nom : 'Logement') +
+        '<small class="recap-unite">' + (z.emetteur === 'plancher' ? 'Plancher chauffant' : 'Radiateurs') + '</small></th>' +
         '<td>' + nf(z.surface, 1) + ' m²</td>' +
         '<td class="c-heat">' + kW(z.chauffage) + '<small>' + (z.surface > 0 ? nf(z.chauffage / z.surface) + ' W/m²' : '') + '</small></td>' +
         '<td class="recap-noms">' + (z.indices.map(function (i) { return esc(res.sources[i].nom); }).join(', ') || '—') + '</td></tr>';
@@ -875,12 +876,12 @@
       return { t: t, n: zs.length, surface: zs.reduce(function (s, z) { return s + z.surface; }, 0), chauffage: zs.reduce(function (s, z) { return s + z.chauffage; }, 0) };
     }).filter(function (x) { return x.n > 0; });
     var pied = res.zones.length > 1 ? types.map(function (x) {
-      return '<tr><th scope="row">Total ' + (x.t === 'plancher' ? 'plancher chauffant' : 'radiateurs') + '</th><td></td><td>' + nf(x.surface, 1) + ' m²</td>' +
+      return '<tr><th scope="row">Total ' + (x.t === 'plancher' ? 'plancher chauffant' : 'radiateurs') + '</th><td>' + nf(x.surface, 1) + ' m²</td>' +
         '<td class="c-heat">' + kW(x.chauffage) + '</td><td></td></tr>';
     }).join('') : '';
     return '<h3 class="sub-title">Par zone de chauffage</h3>' +
       '<div class="recap-scroll"><table class="recap"><thead><tr>' +
-      '<th scope="col">Zone</th><th scope="col">Émetteurs</th><th scope="col">Surface</th><th scope="col">Chauffage</th><th scope="col">Pièces</th>' +
+      '<th scope="col">Zone</th><th scope="col">Surface</th><th scope="col">Chauffage</th><th scope="col">Pièces</th>' +
       '</tr></thead><tbody>' + lignes.join('') + '</tbody>' + (pied ? '<tfoot>' + pied + '</tfoot>' : '') + '</table></div>';
   }
 
@@ -995,7 +996,8 @@
       '<label class="btn primary"><input type="file" accept="image/*" capture="environment" data-plan-ajout hidden>Prendre une photo</label>' +
       '<label class="btn"><input type="file" accept="image/*,application/pdf" multiple data-plan-ajout hidden>Ajouter des fichiers</label>' +
       '</div>' +
-      '<p class="hint">Plans, croquis ou photos (images ou PDF), enregistrés sur cet appareil avec le chantier. ' +
+      '<p class="hint">Plans, croquis ou photos (images ou PDF), enregistrés avec le chantier' +
+      (window.Sync.etat().connecte ? ' et copiés sur tes autres appareils à la sauvegarde. ' : ' sur cet appareil. ') +
       'Les images sont ajoutées en fin de PDF (client et détaillé) ; les plans PDF sont joints à l\'envoi par email.</p>');
   }
 
@@ -1802,13 +1804,15 @@
   function sauvegarder() {
     var l = chantiers();
     if (!state.id) state.id = uid();
-    var entree = { id: state.id, savedAt: new Date().toISOString(), data: JSON.parse(JSON.stringify(state)) };
+    var entree = { id: state.id, savedAt: new Date().toISOString(), data: JSON.parse(JSON.stringify(state)), envoye: false };
     var idx = l.findIndex(function (c) { return c.id === state.id; });
     if (idx >= 0) l[idx] = entree; else l.unshift(entree);
     if (ecrire(CLE_CHANTIERS, l)) {
       modifie = false;
       ecrire(CLE_BROUILLON, state);
-      toast('Chantier sauvegardé');
+      var es = window.Sync.etat();
+      toast(es.configure && es.connecte ? 'Chantier sauvegardé — envoi vers tes autres appareils' : 'Chantier sauvegardé');
+      window.Sync.planifier();
     } else {
       toast('Échec de la sauvegarde (stockage indisponible ou plein)');
     }
@@ -1816,9 +1820,39 @@
   }
 
 
+  function heure(ms) {
+    return new Date(ms).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function blocSynchro(l) {
+    var es = window.Sync.etat();
+    if (!es.configure) return '';
+    if (!es.connecte) {
+      return '<form class="synchro" id="form-connexion">' +
+        '<p><strong>Synchronisation</strong><br><span class="muted small">Connecte-toi pour retrouver tes chantiers sur le téléphone, la tablette et l\'ordinateur. Les chantiers déjà sur cet appareil seront envoyés.</span></p>' +
+        '<div class="grid">' +
+        '<div class="field span-2"><label class="lbl" for="sync-email">Email</label><div class="ctrl"><span class="inp"><input id="sync-email" type="email" autocomplete="username" required></span></div></div>' +
+        '<div class="field span-2"><label class="lbl" for="sync-mdp">Mot de passe</label><div class="ctrl"><span class="inp"><input id="sync-mdp" type="password" autocomplete="current-password" required></span></div></div>' +
+        '</div>' +
+        '<p class="hint warn" id="sync-erreur">' + esc(es.erreur && es.erreur !== 'hors ligne' ? es.erreur : '') + '</p>' +
+        '<button type="submit" class="btn primary" id="sync-connecter">Se connecter</button>' +
+        '</form>';
+    }
+    var attente = l.filter(function (c) { return c.envoye !== true; }).length;
+    var info = es.enCours ? (es.detail || 'Synchronisation en cours') + '…'
+      : es.erreur ? (es.erreur === 'hors ligne' ? 'Hors ligne' : es.erreur) + (attente ? ' · ' + attente + ' à envoyer' : '')
+      : (es.derniere ? 'Synchronisé à ' + heure(es.derniere) : 'Pas encore synchronisé') + (attente ? ' · ' + attente + ' à envoyer' : '');
+    return '<div class="synchro connecte">' +
+      '<p><strong>Synchronisation active</strong><br><span class="muted small">' + esc(es.email) + ' · ' + esc(info) + '</span></p>' +
+      '<div class="synchro-actions"><button type="button" class="btn small" data-sync="maintenant"' + (es.enCours ? ' disabled' : '') + '>Synchroniser</button>' +
+      '<button type="button" class="btn ghost small" data-sync="deconnexion">Se déconnecter</button></div>' +
+      '</div>';
+  }
+
   function afficherChantiers() {
     var l = chantiers();
-    var html = l.length
+    var es = window.Sync.etat();
+    var html = blocSynchro(l) + (l.length
       ? '<ul class="chantiers">' + l.map(function (c) {
         var cl = c.data.client || {};
         var res = C.calculChantier(normaliser(c.data));
@@ -1826,21 +1860,46 @@
           '<button type="button" class="chantier-load" data-load="' + esc(c.id) + '">' +
           '<strong>' + esc(cl.nom || 'Sans nom') + '</strong>' +
           '<span class="muted small">' + esc(dateFr(cl.date)) + (cl.adresse ? ' · ' + esc(cl.adresse) : '') + '</span>' +
-          '<span class="small">' + esc(F.libelle(D.SYSTEMES, res.systeme)) + ' · ' + kW(res.chauffage) + ' chauffage · ' + kW(res.climatisation) + ' clim</span>' +
+          '<span class="small">' + esc(F.libelle(D.SYSTEMES, res.systeme)) + ' · ' + kW(res.chauffage) + ' chauffage · ' + kW(res.climatisation) + ' clim' +
+          (es.configure && c.envoye !== true ? ' <em class="a-envoyer">à envoyer</em>' : '') + '</span>' +
           '</button>' +
           '<button type="button" class="btn ghost icon-btn danger" data-delete="' + esc(c.id) + '" aria-label="Supprimer ce chantier">' +
           '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>' +
           '</li>';
       }).join('') + '</ul>'
-      : '<p class="muted empty">Aucun chantier sauvegardé sur cet appareil.</p>';
+      : '<p class="muted empty">Aucun chantier sauvegardé' + (es.configure && es.connecte ? '' : ' sur cet appareil') + '.</p>');
     document.getElementById('liste-chantiers').innerHTML = html +
-      '<p class="hint">Les chantiers sont stockés uniquement sur cet appareil, dans ce navigateur.</p>';
+      '<p class="hint">' + (es.configure && es.connecte
+        ? 'Les chantiers sauvegardés et leurs plans sont copiés sur le serveur et disponibles sur tous les appareils connectés.'
+        : 'Les chantiers sont stockés uniquement sur cet appareil, dans ce navigateur.') + '</p>';
   }
 
   var dlg = document.getElementById('dlg-chantiers');
 
+  dlg.addEventListener('submit', function (e) {
+    if (e.target.id !== 'form-connexion') return;
+    e.preventDefault();
+    var bt = document.getElementById('sync-connecter');
+    var err = document.getElementById('sync-erreur');
+    bt.disabled = true; bt.textContent = 'Connexion…'; err.textContent = '';
+    window.Sync.connecter(document.getElementById('sync-email').value, document.getElementById('sync-mdp').value)
+      .then(function (b) {
+        afficherChantiers();
+        toast(b ? 'Connecté : chantiers synchronisés' : 'Connecté');
+      }, function (ex) {
+        bt.disabled = false; bt.textContent = 'Se connecter';
+        err.textContent = ex.code === 'hors_ligne' ? 'Pas de réseau : réessaie avec une connexion.' : ex.message;
+      });
+  });
+
   dlg.addEventListener('click', function (e) {
     if (e.target === dlg || e.target.closest('[data-close]')) { dlg.close(); return; }
+    var sy = e.target.closest('[data-sync]');
+    if (sy) {
+      if (sy.dataset.sync === 'maintenant') window.Sync.synchroniser();
+      else if (confirm('Se déconnecter ? Les chantiers restent sur cet appareil, mais ne seront plus synchronisés.')) { window.Sync.deconnecter(); afficherChantiers(); }
+      return;
+    }
     var load = e.target.closest('[data-load]');
     var del = e.target.closest('[data-delete]');
     if (load) {
@@ -1866,6 +1925,7 @@
       if (!cible) return;
       if (!confirm('Supprimer définitivement le chantier « ' + ((cible.data.client || {}).nom || 'Sans nom') + ' » ?')) return;
       ecrire(CLE_CHANTIERS, l.filter(function (x) { return x.id !== cible.id; }));
+      window.Sync.supprimer(cible.id);
       nettoyerPlans(idsPlans(cible.data));
       if (state.id === cible.id) { state.id = null; ecrire(CLE_BROUILLON, state); rafraichir(); }
       afficherChantiers();
@@ -1999,6 +2059,49 @@
 
   window.Entreprise.initialiser();
   window.Envoi.initialiser();
+
+  /* ---------- Synchronisation entre appareils ---------- */
+
+  function etatSynchro(es) {
+    var el = document.getElementById('etat-synchro');
+    if (el) {
+      var attente = chantiers().filter(function (c) { return c.envoye !== true; }).length;
+      el.hidden = !es.configure;
+      el.className = 'synchro-etat ' + (!es.connecte ? 'off' : es.enCours ? 'encours' : es.erreur ? 'off' : 'ok');
+      el.textContent = !es.connecte ? 'Non synchronisé'
+        : es.enCours ? (es.detail || 'Synchronisation') + '…'
+        : es.erreur ? (es.erreur === 'hors ligne' ? 'Hors ligne' : 'Synchro en erreur') + (attente ? ' · ' + attente + ' à envoyer' : '')
+        : 'Synchronisé' + (es.derniere ? ' ' + heure(es.derniere) : '');
+    }
+    // Rafraîchit la liste ouverte, sauf pendant la saisie des identifiants.
+    var f = document.getElementById('form-connexion');
+    if (dlg.open && !(f && f.contains(document.activeElement))) afficherChantiers();
+  }
+
+  // Chantiers modifiés sur un autre appareil : recharge le relevé ouvert s'il n'est pas en cours de modification.
+  function recus(ids) {
+    if (!state.id || ids.indexOf(state.id) < 0) return;
+    var c = chantiers().find(function (x) { return x.id === state.id; });
+    if (!c) { state.id = null; ecrire(CLE_BROUILLON, state); rafraichir(); toast('Ce relevé a été supprimé sur un autre appareil'); return; }
+    if (modifie) { toast('Ce relevé a été modifié sur un autre appareil : « Sauver » remplacera cette version'); return; }
+    state = normaliser(c.data);
+    state.id = c.id;
+    ecrire(CLE_BROUILLON, state);
+    render();
+    toast('Relevé mis à jour depuis un autre appareil');
+  }
+
+  window.Sync.initialiser({
+    lireChantiers: chantiers,
+    ecrireChantiers: function (l) { ecrire(CLE_CHANTIERS, l); },
+    etat: etatSynchro,
+    recus: recus,
+    plans: { lire: window.Plans.lire, enregistrer: window.Plans.enregistrer },
+    // Fichiers reçus d'un autre appareil : affiche les vignettes du relevé ouvert.
+    plansRecus: function (ids) {
+      if (state.plans.some(function (pl) { return ids.indexOf(pl.id) >= 0; })) vignettesPlans();
+    }
+  });
 
   // Mises à jour : vérifiées à chaque retour sur l'application (une application installée reste
   // ouverte en arrière-plan) ; quand la nouvelle version prend la main, la page se recharge
