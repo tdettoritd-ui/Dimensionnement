@@ -859,6 +859,31 @@
     return !C.estVide(state.prime.personnes) && !C.personnesFoyer(state.prime);
   }
 
+  // Surface et besoin par zone de chauffage (air/eau) : plancher chauffant, radiateurs.
+  function renderRecapZones(res) {
+    if (!res.zones.length) return '';
+    var lignes = res.zones.map(function (z) {
+      return '<tr><th scope="row">' + esc(res.zones.length > 1 ? z.nom : 'Logement') + '</th>' +
+        '<td class="recap-noms">' + (z.emetteur === 'plancher' ? 'Plancher chauffant' : 'Radiateurs') + '</td>' +
+        '<td>' + nf(z.surface, 1) + ' m²</td>' +
+        '<td class="c-heat">' + kW(z.chauffage) + '<small>' + (z.surface > 0 ? nf(z.chauffage / z.surface) + ' W/m²' : '') + '</small></td>' +
+        '<td class="recap-noms">' + (z.indices.map(function (i) { return esc(res.sources[i].nom); }).join(', ') || '—') + '</td></tr>';
+    });
+    // Plusieurs zones : total par type d'émetteur.
+    var types = ['plancher', 'radiateurs'].map(function (t) {
+      var zs = res.zones.filter(function (z) { return z.emetteur === t; });
+      return { t: t, n: zs.length, surface: zs.reduce(function (s, z) { return s + z.surface; }, 0), chauffage: zs.reduce(function (s, z) { return s + z.chauffage; }, 0) };
+    }).filter(function (x) { return x.n > 0; });
+    var pied = res.zones.length > 1 ? types.map(function (x) {
+      return '<tr><th scope="row">Total ' + (x.t === 'plancher' ? 'plancher chauffant' : 'radiateurs') + '</th><td></td><td>' + nf(x.surface, 1) + ' m²</td>' +
+        '<td class="c-heat">' + kW(x.chauffage) + '</td><td></td></tr>';
+    }).join('') : '';
+    return '<h3 class="sub-title">Par zone de chauffage</h3>' +
+      '<div class="recap-scroll"><table class="recap"><thead><tr>' +
+      '<th scope="col">Zone</th><th scope="col">Émetteurs</th><th scope="col">Surface</th><th scope="col">Chauffage</th><th scope="col">Pièces</th>' +
+      '</tr></thead><tbody>' + lignes.join('') + '</tbody>' + (pied ? '<tfoot>' + pied + '</tfoot>' : '') + '</table></div>';
+  }
+
   // Bilan par unité extérieure (à partir de deux unités).
   function renderRecapUnites(res) {
     if (!res.unites.length) return '';
@@ -930,6 +955,7 @@
       (radiateurs ? '<tr><th>Sortie d\'eau PAC</th><td>' + esc(F.libelle(D.REGIMES_EAU, state.installation.regimeEau)) + '</td></tr>' : '') +
       '<tr><th>Catégorie Anah</th><td>' + (anah ? badgeAnah(anah) : '—') + '</td></tr>' +
       '</tbody></table>' +
+      renderRecapZones(res) +
       renderRecapUnites(res) +
       '<h3 class="sub-title">' + (global ? 'Par niveau' : 'Par pièce') + '</h3>' +
       '<div class="recap-scroll"><table class="recap"><thead><tr>' +

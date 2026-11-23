@@ -896,6 +896,8 @@ test('zones de chauffage : radiateurs ou plancher chauffant', () => {
   // Bilan par zone.
   assert.deepEqual(r.zones.map(z => [z.nom, z.emetteur, z.indices]), [['RDC', 'plancher', [0, 2]], ['Étage', 'radiateurs', [1]]]);
   proche(r.zones[0].chauffage + r.zones[1].chauffage, r.chauffage);
+  proche(r.zones[0].surface, 32);
+  proche(r.zones[1].surface, 16);
   // Sans zone saisie : une zone en radiateurs ; air/air : pas de zone.
   assert.equal(C.calculChantier({ climat, prime: {}, pieces: [P('Séjour')] }).zones[0].emetteur, 'radiateurs');
   assert.equal(C.calculChantier({ climat, systeme: 'air_air', prime: {}, pieces: [P('Séjour')] }).zones.length, 0);

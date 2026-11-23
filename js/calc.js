@@ -1149,7 +1149,8 @@
         var indices = [];
         sources.forEach(function (p, i) { if (zoneDePiece(p, zones) === z) indices.push(i); });
         return { uid: z.uid, nom: z.nom || 'Zone ' + (k + 1), emetteur: z.emetteur === 'plancher' ? 'plancher' : 'radiateurs', indices: indices,
-          chauffage: indices.reduce(function (t, i) { return t + pieces[i].chauffage; }, 0) };
+          chauffage: indices.reduce(function (t, i) { return t + pieces[i].chauffage; }, 0),
+          surface: indices.reduce(function (t, i) { return t + pieces[i].surface; }, 0) };
       }),
       foyer: foyer,
       palierChauffage: palier(chauffage / 1000, D.PALIERS_PAC),

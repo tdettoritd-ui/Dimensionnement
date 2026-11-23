@@ -101,7 +101,7 @@
     // Zones de chauffage : émetteur de chacune (et son besoin s'il y en a plusieurs).
     var texteEmetteurs = res.zones.map(function (z) {
       return (res.zones.length > 1 ? z.nom + ' : ' : '') + (z.emetteur === 'plancher' ? 'plancher chauffant' : 'radiateurs') +
-        (res.zones.length > 1 ? ' (' + F.kW(z.chauffage) + ')' : '');
+        ' – ' + F.nf(z.surface, 1) + ' m²' + (res.zones.length > 1 ? ', ' + F.kW(z.chauffage) : '');
     }).join('\n');
     var y = MARGE;
 
