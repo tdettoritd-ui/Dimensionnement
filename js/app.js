@@ -1863,6 +1863,8 @@
           '<span class="small">' + esc(F.libelle(D.SYSTEMES, res.systeme)) + ' · ' + kW(res.chauffage) + ' chauffage · ' + kW(res.climatisation) + ' clim' +
           (es.configure && c.envoye !== true ? ' <em class="a-envoyer">à envoyer</em>' : '') + '</span>' +
           '</button>' +
+          '<button type="button" class="btn ghost icon-btn" data-dupliquer="' + esc(c.id) + '" aria-label="Dupliquer ce chantier" title="Dupliquer">' +
+          '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 9h11v11H9zM5 15H4V4h11v1"/></svg></button>' +
           '<button type="button" class="btn ghost icon-btn danger" data-delete="' + esc(c.id) + '" aria-label="Supprimer ce chantier">' +
           '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>' +
           '</li>';
@@ -1902,23 +1904,15 @@
     }
     var load = e.target.closest('[data-load]');
     var del = e.target.closest('[data-delete]');
+    var dup = e.target.closest('[data-dupliquer]');
     if (load) {
       var c = chantiers().find(function (x) { return x.id === load.dataset.load; });
       if (!c) return;
       if (modifie && !confirm('Les modifications non sauvegardées du relevé en cours seront perdues. Continuer ?')) return;
-      var avant = idsPlans(state);
-      state = normaliser(c.data);
-      nettoyerPlans(avant);
-      state.id = c.id;
-      modifie = false;
-      ui.replie = {};
-      ui.sous = null;
-      ui.detail = {};
-      ecrire(CLE_BROUILLON, state);
-      dlg.close();
-      render();
-      window.scrollTo(0, 0);
+      chargerChantier(c);
       toast('Chantier chargé');
+    } else if (dup) {
+      dupliquerChantier(dup.dataset.dupliquer);
     } else if (del) {
       var l = chantiers();
       var cible = l.find(function (x) { return x.id === del.dataset.delete; });
@@ -1931,6 +1925,40 @@
       afficherChantiers();
     }
   });
+
+  function chargerChantier(c) {
+    var avant = idsPlans(state);
+    state = normaliser(c.data);
+    nettoyerPlans(avant);
+    state.id = c.id;
+    modifie = false;
+    ui.replie = {};
+    ui.sous = null;
+    ui.detail = {};
+    ecrire(CLE_BROUILLON, state);
+    dlg.close();
+    render();
+    window.scrollTo(0, 0);
+  }
+
+  // Copie d'un chantier sauvegardé (pièces, réglages, plans) sous un nouvel identifiant, placée juste
+  // après l'original et ouverte. Les plans sont partagés : un fichier reste tant qu'un chantier l'utilise.
+  function dupliquerChantier(id) {
+    var l = chantiers();
+    var k = l.findIndex(function (x) { return x.id === id; });
+    if (k < 0) return;
+    if (modifie && !confirm('Les modifications non sauvegardées du relevé en cours seront perdues. Continuer ?')) return;
+    var copie = JSON.parse(JSON.stringify(l[k].data));
+    copie.id = uid();
+    copie.client = copie.client || {};
+    copie.client.nom = (copie.client.nom || 'Sans nom') + ' (copie)';
+    var entree = { id: copie.id, savedAt: new Date().toISOString(), data: copie, envoye: false };
+    l.splice(k + 1, 0, entree);
+    if (!ecrire(CLE_CHANTIERS, l)) { toast('Duplication impossible (stockage indisponible ou plein)'); return; }
+    window.Sync.planifier();
+    chargerChantier(entree);
+    toast('Chantier dupliqué : « ' + copie.client.nom + ' »');
+  }
 
   function ajouterPiece() {
     var np = nouvellePiece(state.pieces.length + 1);
