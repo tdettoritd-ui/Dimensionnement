@@ -305,6 +305,11 @@ test('climatisation : valeurs de référence contre-vérifiées (pièces types)'
     [P({ sousToiture: 'oui', surPlancherBas: 'non', lineaire: '0', vitrages: [V('toit', 1, 'double_argon')] }), { ...A, toitureType: 'rampants' }, 793]
   ];
   cas.forEach(([p, c, attendu]) => assert.equal(Math.round(C.calculPiece(p, c, undefined, 4).climatisation), attendu, p.nom));
+  // Résultat corrigé (pointe horaire) : Ouest + Sud culminent à des heures différentes → 3 015 W à 19 h.
+  const sej = C.calculPiece(cas[2][0], A, undefined, 4);
+  assert.equal(Math.round(sej.climatisationHoraire), 3015);
+  assert.equal(sej.clim.creneauPiece, '19 h');
+  assert.equal(Math.round(C.calculPiece(cas[0][0], A, undefined, 4).climatisationHoraire), 781); // une orientation : identique
 });
 
 test('climatisation : défauts selon le nom de la pièce et foyer', () => {
@@ -901,4 +906,26 @@ test('zones de chauffage : radiateurs ou plancher chauffant', () => {
   // Sans zone saisie : une zone en radiateurs ; air/air : pas de zone.
   assert.equal(C.calculChantier({ climat, prime: {}, pieces: [P('Séjour')] }).zones[0].emetteur, 'radiateurs');
   assert.equal(C.calculChantier({ climat, systeme: 'air_air', prime: {}, pieces: [P('Séjour')] }).zones.length, 0);
+});
+
+test('climatisation par pièce : pointe solaire horaire (orientations multiples non simultanées)', () => {
+  const P = (vitrages) => ({ nom: 'Séjour', longueur: '6', largeur: '5', hauteur: '2,5', lineaire: '11', sousToiture: 'non', vitrages, debit: '30' });
+  const V = (o, s) => ({ orientation: o, type: 'double', surface: String(s), volet: 'non' });
+  const g = D.find(D.VITRAGES, 'double').g;
+  const w = (id) => D.find(D.ORIENTATIONS, id).wPiece;
+  // Une seule orientation : pointe de l'orientation, identique dans les deux calculs.
+  const un = C.calculPiece(P([V('O', 4)]), climat);
+  proche(un.clim.solairesHoraire, 4 * g * w('O'));
+  proche(un.climatisationHoraire, un.climatisation);
+  // Est + Ouest : calcul d'origine = somme des pointes ; corrigé = maximum horaire (moins, mais au moins la plus forte).
+  const r = C.calculPiece(P([V('E', 4), V('O', 4)]), climat);
+  proche(r.apports.solaires, 4 * g * (w('E') + w('O')));
+  assert.ok(r.clim.solairesHoraire < r.apports.solaires - 1);
+  assert.ok(r.clim.solairesHoraire >= 4 * g * Math.max(w('E'), w('O')) - 1e-9);
+  assert.ok(r.climatisationHoraire < r.climatisation);
+  assert.ok(D.CLIM.heuresCreneaux.indexOf(r.clim.creneauPiece) >= 0);
+  // Profil horaire : chaque baie ramenée à sa pointe propre au créneau de son maximum.
+  const prof = (id) => D.find(D.ORIENTATIONS, id).cren.map(c => c * w(id) / Math.max(...D.find(D.ORIENTATIONS, id).cren));
+  const attendu = Math.max(...prof('E').map((x, j) => 4 * g * (x + prof('O')[j])));
+  proche(r.clim.solairesHoraire, attendu);
 });

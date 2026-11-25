@@ -442,6 +442,8 @@
         ['Sol (terre-plein)', r.sol ? 'U équivalent ' + F.nf(r.sol.uEquiv, 2) + ' (B\' ' + F.nf(r.sol.bPrime, 1) + (r.sol.parBatiment ? ', bâtiment' : '') +
           ') × fg1 ' + F.nf(D.SOL.fg1, 2) + ' × fg2 ' + F.nf(r.sol.fg2, 2) + ' = ' + F.nf(r.sol.u, 2) + ' W/m².K' : ''],
         ['Climatisation', F.W(r.clim.sensible) + ' sensible + ' + F.W(r.clim.latent) + ' latent -> ' + F.W(r.climatisation) +
+          (Math.round(r.climatisationHoraire) < Math.round(r.climatisation)
+            ? ' ; corrigé (pointe horaire, ' + r.clim.creneauPiece + ') ' + F.W(r.climatisationHoraire) + ', split ' + F.textePalierSplit(r.palierSplitHoraire) : '') +
           ' nominal' + (p.virtuel ? '' : ' · split ' + F.textePalierSplit(r.palierSplit)) +
           ' (' + F.nf(r.clim.occupants) + ' occupant' + (r.clim.occupants > 1 ? 's' : '') + ', équipements ' + F.W(r.clim.equipements) + ')'],
         ['Déperditions G', F.nf(r.G, 2) + ' W/K (dont ponts thermiques ' + F.nf(r.deperditions.pontsThermiques, 2) + ') · base ' +

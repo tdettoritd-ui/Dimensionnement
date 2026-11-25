@@ -926,6 +926,8 @@
         '<td>' + nf(r.surface, 1) + ' m²</td>' +
         '<td class="c-heat">' + W(r.chauffage) + '</td>' +
         '<td class="c-cool">' + W(r.climatisation) + '</td>' +
+        '<td class="c-cool">' + W(r.climatisationHoraire) + '<small>' + (r.clim.creneauPiece ? 'pic ' + esc(r.clim.creneauPiece) + ' · ' : '') +
+          'split ' + esc(textePalierSplit(r.palierSplitHoraire)) + '</small></td>' +
         '<td>' + (global ? '—' : esc(textePalierSplit(r.palierSplit))) + '</td>' +
         (radiateurs && r.plancherChauffant
           ? '<td>Plancher chauffant<small>' + nf(r.plancherChauffant.wm2) + ' W/m²' + (r.plancherChauffant.suffisant ? '' : ' (> ' + r.plancherChauffant.limite + ')') + '</small></td><td>—</td>'
@@ -936,7 +938,7 @@
           : '') +
         '</tr>';
     }).join('');
-    var colonnes = radiateurs ? 7 : 5;
+    var colonnes = radiateurs ? 8 : 6;
     var anah = res.anah;
     var personnesKo = personnesInvalides();
     return '<section class="card" aria-labelledby="titre-recap"><div class="card-head"><h2 class="card-title" id="titre-recap">Récapitulatif</h2>' +
@@ -960,13 +962,16 @@
       renderRecapUnites(res) +
       '<h3 class="sub-title">' + (global ? 'Par niveau' : 'Par pièce') + '</h3>' +
       '<div class="recap-scroll"><table class="recap"><thead><tr>' +
-      '<th scope="col">' + (global ? 'Niveau' : 'Pièce') + '</th><th scope="col">Surface</th><th scope="col">Chauffage</th><th scope="col">Clim</th><th scope="col">Split</th>' +
+      '<th scope="col">' + (global ? 'Niveau' : 'Pièce') + '</th><th scope="col">Surface</th><th scope="col">Chauffage</th><th scope="col">Clim</th>' +
+      '<th scope="col">Clim corrigée<br><small>pic horaire</small></th><th scope="col">Split</th>' +
       (radiateurs ? '<th scope="col">Radiateur neuf</th><th scope="col">Radiateurs existants</th>' : '') +
       '</tr></thead><tbody>' + (lignes || '<tr><td colspan="' + colonnes + '">Aucune pièce.</td></tr>') + '</tbody>' +
-      '<tfoot><tr><th scope="row">Total</th><td>' + nf(surface, 1) + ' m²</td><td class="c-heat">' + kW(res.chauffage) + '</td><td class="c-cool">' + kW(res.climSommePieces) + '</td><td colspan="' + (colonnes - 4) + '"></td></tr>' +
+      '<tfoot><tr><th scope="row">Total</th><td>' + nf(surface, 1) + ' m²</td><td class="c-heat">' + kW(res.chauffage) + '</td><td class="c-cool">' + kW(res.climSommePieces) + '</td><td class="c-cool">' + kW(somme(res.pieces, function (r) { return r.climatisationHoraire; })) + '</td><td colspan="' + (colonnes - 5) + '"></td></tr>' +
       '<tr><th scope="row">Clim simultanée</th><td></td><td></td><td class="c-cool">' + kW(res.climatisation) + '</td><td colspan="' + (colonnes - 4) + '"></td></tr></tfoot>' +
       '</table></div>' +
-      '<p class="hint">Clim simultanée : puissance du groupe extérieur (toutes les pièces ne sont pas au soleil en même temps). Toucher une pièce pour la modifier.</p>' +
+      '<p class="hint">Clim : pointe de la pièce, soleil de chaque fenêtre à son maximum (calcul d\'origine, choix du split). ' +
+      'Clim corrigée : soleil de la pièce heure par heure, au maximum de la journée — plus bas pour une pièce vitrée sur plusieurs orientations, identique pour une seule orientation. ' +
+      'Clim simultanée : puissance du groupe extérieur (toutes les pièces ne sont pas au soleil en même temps). Toucher une pièce pour la modifier.</p>' +
       '<div class="recap-actions"><button type="button" class="btn primary" data-global-recap="pdf">Créer le PDF</button>' +
       '<button type="button" class="btn" data-global-recap="sauver">Sauver le chantier</button></div>' +
       '</div></section>';
@@ -1312,7 +1317,8 @@
     var a = r.apports;
     return '<div class="kpis">' +
       '<div class="kpi heat"><span>Chauffage</span><strong>' + kW(r.chauffage) + '</strong><small>' + W(r.chauffage) + '</small></div>' +
-      '<div class="kpi cool"><span>Climatisation</span><strong>' + kW(r.climatisation) + '</strong><small>' + W(r.climatisation) + ' nominal</small></div>' +
+      '<div class="kpi cool"><span>Climatisation</span><strong>' + kW(r.climatisation) + '</strong><small>' + W(r.climatisation) + ' nominal' +
+        (Math.round(r.climatisationHoraire) < Math.round(r.climatisation) ? ' · corrigé ' + W(r.climatisationHoraire) + ' (pic ' + esc(r.clim.creneauPiece) + ')' : '') + '</small></div>' +
       '</div>' +
       '<div class="reco"><span>Split préconisé (unité intérieure)</span><strong>' + textePalierSplit(r.palierSplit) + '</strong></div>' +
       (airAir() ? '' : r.plancherChauffant
@@ -1350,7 +1356,8 @@
       '<tr><th>Puissance de base (G × ΔT)</th><td>' + W(r.chauffageBase) + '</td></tr>' +
       '<tr><th>Surpuissance de relance</th><td>+ ' + nf(r.surpuissance) + ' % = ' + W(r.chauffage) + '</td></tr>' +
       '<tr class="sep"><th colspan="2">Apports été, pointe de la pièce (W)</th></tr>' +
-      '<tr><th>Soleil par les baies' + (r.clim.pieceLegere ? ' (pièce légère)' : '') + '</th><td>' + nf(a.solaires) + '</td></tr>' +
+      '<tr><th>Soleil par les baies' + (r.clim.pieceLegere ? ' (pièce légère)' : '') + ', pointes additionnées</th><td>' + nf(a.solaires) + '</td></tr>' +
+      '<tr><th>Soleil, pointe horaire de la pièce' + (r.clim.creneauPiece ? ' (' + esc(r.clim.creneauPiece) + ')' : '') + '</th><td>' + nf(r.clim.solairesHoraire) + '</td></tr>' +
       '<tr><th>Conduction des baies</th><td>' + nf(a.vitrages) + '</td></tr>' +
       '<tr><th>Murs au soleil</th><td>' + nf(a.murs) + '</td></tr>' +
       '<tr><th>Toiture / combles</th><td>' + nf(a.toiture) + '</td></tr>' +

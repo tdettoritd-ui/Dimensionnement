@@ -761,9 +761,13 @@
     var legere = !!mur.bois || (piece.sousToiture !== 'non' && !!(toit && toit.leger));
 
     // Baies : soleil (pointe de la pièce / simultané maison) et conduction (volets ouverts le jour).
-    var solaires = 0;
     var solairesSimultanes = 0;
     var solairesCreneaux = rayonnementCreneaux(null);
+    // Soleil de la pièce heure par heure : chaque baie suit le profil horaire de son orientation,
+    // ramené à sa pointe propre (wPiece). Les baies d'orientations différentes ne culminent pas
+    // ensemble (Est le matin, Ouest le soir) : la pointe de la pièce est le maximum des créneaux.
+    var solairesPiece = rayonnementCreneaux(null);
+    var solaires = 0; // pointe de chaque baie additionnée (calcul d'origine)
     var vitrages = 0;
     vitragesPiece(piece).forEach(function (v) {
       var s = Math.max(num(v.surface), 0);
@@ -771,12 +775,18 @@
       var f = fenetre(v, climat);
       var verticale = !fenetreDeToit(v);
       var or = orientationBaie(v);
-      solaires += s * f.g * rayonnementPiece(or) * (legere && verticale ? K.solaireLeger : 1);
-      solairesSimultanes += s * f.g * rayonnement(or);
       var facteur = legere && verticale ? K.solaireLeger : 1;
+      solaires += s * f.g * rayonnementPiece(or) * facteur;
+      var profil = rayonnementCreneaux(or);
+      var pic = Math.max.apply(null, profil);
+      profil.forEach(function (w, j) { solairesPiece[j] += pic > 0 ? s * f.g * facteur * w * rayonnementPiece(or) / pic : 0; });
+      solairesSimultanes += s * f.g * rayonnement(or);
       rayonnementCreneaux(or).forEach(function (w, j) { solairesCreneaux[j] += s * f.g * w * facteur; });
       vitrages += Math.max(f.uw, U_VITRAGE_MIN) * s * ecart;
     });
+
+    var solairesHoraire = Math.max.apply(null, solairesPiece);
+    var creneauPiece = solairesHoraire > 0 ? K.heuresCreneaux[solairesPiece.indexOf(solairesHoraire)] : null;
 
     // Murs au soleil : chaque isolation avec son écart équivalent, au prorata du linéaire.
     var murs = 0;
@@ -809,17 +819,25 @@
     };
     var sensible = solaires + vitrages + murs + toiture + ponts + ventilation + apports.occupants + equipements;
     var latent = apports.latentOccupants + apports.latentAir;
+    // Résultat corrigé : même bilan avec la pointe solaire horaire de la pièce (≤ la somme des pointes).
+    var sensibleHoraire = sensible - solaires + solairesHoraire;
     return {
       apports: apports,
       sensible: sensible,
       latent: latent,
       nominale: puissanceNominale(sensible, latent) * majorationClim(climat),
+      solairesHoraire: solairesHoraire,
+      sensibleHoraire: sensibleHoraire,
+      nominaleHoraire: puissanceNominale(sensibleHoraire, latent) * majorationClim(climat),
       occupants: occupants,
       occupantsAuto: occupantsAuto,
       equipements: equipements,
       equipementsAuto: equipementsAuto,
       pieceLegere: legere,
       solairesSimultanes: solairesSimultanes,
+      // Pointe solaire horaire de la pièce : heure du maximum et soleil de la pièce à chaque créneau.
+      creneauPiece: creneauPiece,
+      solairesPieceCreneaux: solairesPiece,
       solairesCreneaux: solairesCreneaux,
       // Termes proportionnels à l'écart été (T ext - T int), pondérés à chaque créneau.
       transmission: vitrages + murs + toiture + ponts + ventilation
@@ -989,6 +1007,9 @@
       // Puissance frigorifique nominale de la pièce (choix du split).
       climatisation: clim.nominale,
       palierSplit: palier(clim.nominale / 1000, D.PALIERS_SPLIT),
+      // Corrigé : pointe solaire horaire de la pièce (orientations multiples non simultanées).
+      climatisationHoraire: clim.nominaleHoraire,
+      palierSplitHoraire: palier(clim.nominaleHoraire / 1000, D.PALIERS_SPLIT),
       facteurRegime: facteur,
       // Palier catalogue (ΔT50) dont la puissance au régime d'eau couvre le besoin.
       // Zone en plancher chauffant : pas de radiateur ; puissance surfacique à comparer au maximum.
